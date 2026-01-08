@@ -21,7 +21,7 @@ export interface CreateCategoryData {
   parentId?: string;
 }
 
-export interface UpdateCategoryData extends Partial<CreateCategoryData> {}
+export type UpdateCategoryData = Partial<CreateCategoryData>;
 
 export const categoriesApi = {
   getAll: async (type?: CategoryType): Promise<Category[]> => {

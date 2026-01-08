@@ -43,7 +43,7 @@ export interface CreateTransactionData {
   tagIds?: string[];
 }
 
-export interface UpdateTransactionData extends Partial<CreateTransactionData> {}
+export type UpdateTransactionData = Partial<CreateTransactionData>;
 
 export interface TransactionFilters {
   type?: TransactionType;

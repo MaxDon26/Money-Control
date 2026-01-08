@@ -24,7 +24,7 @@ export interface CreateAccountData {
   color?: string;
 }
 
-export interface UpdateAccountData extends Partial<CreateAccountData> {}
+export type UpdateAccountData = Partial<CreateAccountData>;
 
 export interface TotalBalance {
   total: number;

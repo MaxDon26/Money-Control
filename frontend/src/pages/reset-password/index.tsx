@@ -3,7 +3,7 @@ import { Form, Input, Button, message, Alert, Result } from 'antd';
 import { LockOutlined } from '@ant-design/icons';
 import { Link, useSearchParams } from 'react-router-dom';
 import { authApi } from '@/shared/api';
-import { SEO, jsonLdSchemas } from '@/shared/ui';
+import { SEO } from '@/shared/ui';
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();

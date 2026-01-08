@@ -25,7 +25,6 @@ import {
   EditOutlined,
   DeleteOutlined,
   PlayCircleOutlined,
-  PauseCircleOutlined,
   ClockCircleOutlined,
   StepForwardOutlined,
 } from '@ant-design/icons';

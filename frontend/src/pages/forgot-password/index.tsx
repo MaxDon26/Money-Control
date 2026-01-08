@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Form, Input, Button, message, Alert, Result } from 'antd';
+import { Form, Input, Button, Alert, Result } from 'antd';
 import { MailOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { authApi } from '@/shared/api';

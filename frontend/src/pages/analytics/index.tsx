@@ -127,7 +127,6 @@ export default function AnalyticsPage() {
   })) || [];
 
   const totalExpense = expensePieData.reduce((sum, item) => sum + item.value, 0);
-  const totalIncome = incomePieData.reduce((sum, item) => sum + item.value, 0);
 
   const topCategoriesColumns = [
     {

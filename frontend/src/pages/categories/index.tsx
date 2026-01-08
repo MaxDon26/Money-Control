@@ -25,7 +25,7 @@ import {
 import { categoriesApi, Category, CategoryType, CreateCategoryData } from '@/shared/api';
 import { SEO } from '@/shared/ui';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 const categoryTypeLabels: Record<CategoryType, string> = {
   INCOME: 'Доход',

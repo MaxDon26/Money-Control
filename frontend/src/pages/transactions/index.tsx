@@ -45,7 +45,6 @@ import {
   Transfer,
   CreateTransferData,
   tagsApi,
-  Tag as TagType,
 } from '@/shared/api';
 import { SEO } from '@/shared/ui';
 
