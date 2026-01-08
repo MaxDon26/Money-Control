@@ -10,7 +10,7 @@ import {
 } from 'class-validator';
 
 export class CreateBudgetDto {
-  @ValidateIf((o) => !o.isTotal)
+  @ValidateIf((o: CreateBudgetDto) => !o.isTotal)
   @IsUUID()
   @IsNotEmpty()
   categoryId?: string;

@@ -25,16 +25,11 @@ export class CategoriesService {
   }
 
   async findAll(userId: string, type?: CategoryType) {
-    const where: any = {
-      OR: [{ userId }, { isSystem: true }],
-    };
-
-    if (type) {
-      where.type = type;
-    }
-
     return this.prisma.category.findMany({
-      where,
+      where: {
+        OR: [{ userId }, { isSystem: true }],
+        ...(type && { type }),
+      },
       include: {
         children: true,
       },

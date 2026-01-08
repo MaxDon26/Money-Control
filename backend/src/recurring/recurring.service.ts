@@ -5,8 +5,25 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { TransactionType, Frequency as PrismaFrequency } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../prisma';
 import { CreateRecurringDto, UpdateRecurringDto, Frequency } from './dto';
+
+interface RecurringPaymentRecord {
+  id: string;
+  userId: string;
+  name: string;
+  amount: Decimal;
+  categoryId: string;
+  accountId: string;
+  type: TransactionType;
+  frequency: PrismaFrequency;
+  startDate: Date;
+  nextDate: Date;
+  endDate: Date | null;
+  isActive: boolean;
+}
 
 @Injectable()
 export class RecurringService {
@@ -40,8 +57,10 @@ export class RecurringService {
         await this.processPaymentInternal(payment);
         this.logger.log(`Обработан платёж: ${payment.name}`);
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
         this.logger.error(
-          `Ошибка обработки платежа ${payment.name}: ${error.message}`,
+          `Ошибка обработки платежа ${payment.name}: ${errorMessage}`,
         );
       }
     }
@@ -49,7 +68,7 @@ export class RecurringService {
     this.logger.log('Обработка повторяющихся платежей завершена');
   }
 
-  private async processPaymentInternal(payment: any) {
+  private async processPaymentInternal(payment: RecurringPaymentRecord) {
     const balanceChange =
       payment.type === 'INCOME'
         ? Number(payment.amount)
