@@ -111,7 +111,7 @@ jobs:
             npm ci
 
             echo "=== Building frontend ==="
-            npm run build
+            NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
             echo "=== Restarting services ==="
             pm2 restart money-backend --update-env || pm2 start /var/www/money/backend/dist/main.js --name money-backend
