@@ -1,0 +1,11 @@
+# Money Control - robots.txt
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://money-control.app/sitemap.xml
+
+# Disallow API and internal routes
+Disallow: /api/
+Disallow: /auth/
