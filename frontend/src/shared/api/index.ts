@@ -1,6 +1,6 @@
 export { apiClient } from './client';
 export { authApi } from './auth';
-export type { User, AuthResponse, RegisterData, LoginData } from './auth';
+export type { User, AuthResponse, RegisterData, LoginData, UpdateUserData } from './auth';
 export { accountsApi } from './accounts';
 export type { Account, AccountType, CreateAccountData, UpdateAccountData, TotalBalance } from './accounts';
 export { categoriesApi } from './categories';

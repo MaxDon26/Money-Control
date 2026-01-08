@@ -342,8 +342,8 @@ export default function BudgetsPage() {
                   hoverable
                   title={
                     <Space>
-                      <span>{budget.category.icon}</span>
-                      <span>{budget.category.name}</span>
+                      <span>{budget.category?.icon}</span>
+                      <span>{budget.category?.name}</span>
                     </Space>
                   }
                   extra={

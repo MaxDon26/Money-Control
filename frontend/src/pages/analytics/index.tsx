@@ -279,7 +279,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                <Tooltip formatter={(val) => formatCurrency(val as number)} />
                 <Legend />
                 <Bar dataKey="income" name="Доходы" fill="#52c41a" />
                 <Bar dataKey="expense" name="Расходы" fill="#f5222d" />
@@ -289,7 +289,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                <Tooltip formatter={(val) => formatCurrency(val as number)} />
                 <Legend />
                 <Line type="monotone" dataKey="income" name="Доходы" stroke="#52c41a" strokeWidth={2} />
                 <Line type="monotone" dataKey="expense" name="Расходы" stroke="#f5222d" strokeWidth={2} />
@@ -314,7 +314,7 @@ export default function AnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     outerRadius={100}
                     dataKey="value"
                   >
@@ -322,7 +322,7 @@ export default function AnalyticsPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                  <Tooltip formatter={(val) => formatCurrency(val as number)} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -340,7 +340,7 @@ export default function AnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                     outerRadius={100}
                     dataKey="value"
                   >
@@ -348,7 +348,7 @@ export default function AnalyticsPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                  <Tooltip formatter={(val) => formatCurrency(val as number)} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

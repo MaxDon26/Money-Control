@@ -27,7 +27,7 @@ const PageLoader = () => (
   </div>
 );
 
-const withSuspense = (Component: React.LazyExoticComponent<() => React.JSX.Element>) => (
+const withSuspense = (Component: React.LazyExoticComponent<() => React.JSX.Element | null>) => (
   <Suspense fallback={<PageLoader />}>
     <Component />
   </Suspense>
