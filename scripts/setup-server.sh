@@ -1,15 +1,14 @@
-#!/bin/bash
-# Скрипт первичной настройки VPS для Money Control
-# Запускать от root или с sudo
+#!/bin/sh
+# Money Control Server Setup (cloud-init compatible)
+# Для Timeweb и других облачных провайдеров
 
 set -e
 
 echo "=== Money Control Server Setup ==="
 
-# Переменные (измените под себя)
+# Переменные
 APP_DIR="/var/www/money"
-APP_USER="deploy"
-DOMAIN="money.example.com"  # Замените на свой домен
+DB_PASSWORD="$(openssl rand -base64 24)"
 
 # 1. Обновление системы
 echo "=== Updating system ==="
@@ -36,89 +35,116 @@ apt install -y nginx
 echo "=== Installing Certbot ==="
 apt install -y certbot python3-certbot-nginx
 
-# 7. Создание пользователя для деплоя
-echo "=== Creating deploy user ==="
-if ! id "$APP_USER" &>/dev/null; then
-    useradd -m -s /bin/bash $APP_USER
-    mkdir -p /home/$APP_USER/.ssh
-    # Скопируйте сюда свой публичный ключ
-    # echo "ssh-rsa AAAA..." >> /home/$APP_USER/.ssh/authorized_keys
-    chown -R $APP_USER:$APP_USER /home/$APP_USER/.ssh
-    chmod 700 /home/$APP_USER/.ssh
-    chmod 600 /home/$APP_USER/.ssh/authorized_keys
-fi
+# 7. Установка Git
+apt install -y git
 
 # 8. Создание директории приложения
 echo "=== Creating app directory ==="
 mkdir -p $APP_DIR
-chown -R $APP_USER:$APP_USER $APP_DIR
 
 # 9. Настройка PostgreSQL
 echo "=== Configuring PostgreSQL ==="
-sudo -u postgres psql <<EOF
-CREATE USER money_user WITH PASSWORD 'CHANGE_ME_STRONG_PASSWORD';
-CREATE DATABASE money_db OWNER money_user;
-GRANT ALL PRIVILEGES ON DATABASE money_db TO money_user;
-EOF
+sudo -u postgres psql -c "CREATE USER money_user WITH PASSWORD '$DB_PASSWORD';"
+sudo -u postgres psql -c "CREATE DATABASE money_db OWNER money_user;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE money_db TO money_user;"
 
-# 10. Настройка Nginx
+# 10. Клонирование репозитория
+echo "=== Cloning repository ==="
+cd $APP_DIR
+git clone https://github.com/MaxDon26/Money-Control.git .
+
+# 11. Создание .env файла
+echo "=== Creating .env file ==="
+cat > $APP_DIR/backend/.env << ENVEOF
+DATABASE_URL="postgresql://money_user:$DB_PASSWORD@localhost:5432/money_db?schema=public"
+JWT_SECRET="$(openssl rand -base64 32)"
+JWT_ACCESS_EXPIRATION="15m"
+JWT_REFRESH_EXPIRATION="7d"
+NODE_ENV="production"
+PORT=4000
+FRONTEND_URL="http://$(curl -s ifconfig.me)"
+APP_URL="http://$(curl -s ifconfig.me)"
+ENVEOF
+
+# 12. Настройка Nginx (базовая, по IP)
 echo "=== Configuring Nginx ==="
-cat > /etc/nginx/sites-available/money <<EOF
+SERVER_IP=$(curl -s ifconfig.me)
+cat > /etc/nginx/sites-available/money << NGINXEOF
 server {
     listen 80;
-    server_name $DOMAIN;
+    server_name $SERVER_IP;
 
-    # Frontend (SPA)
     location / {
         root $APP_DIR/frontend/dist;
         try_files \$uri \$uri/ /index.html;
 
-        # Кэширование статики
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
             expires 1y;
             add_header Cache-Control "public, immutable";
         }
     }
 
-    # Backend API
     location /api {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
     }
 
-    # Документация (Docusaurus)
     location /docs {
         alias $APP_DIR/docs/build;
         try_files \$uri \$uri/ /docs/index.html;
     }
 }
-EOF
+NGINXEOF
 
 ln -sf /etc/nginx/sites-available/money /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
-# 11. Firewall
+# 13. Firewall
 echo "=== Configuring firewall ==="
 ufw allow 22
 ufw allow 80
 ufw allow 443
 ufw --force enable
 
-echo "=== Setup completed ==="
+# 14. Сборка приложения
+echo "=== Building application ==="
+cd $APP_DIR/backend
+npm ci
+npx prisma migrate deploy
+npx prisma db seed
+npm run build
+
+cd $APP_DIR/frontend
+npm ci
+npm run build
+
+cd $APP_DIR/docs
+npm ci
+npm run build
+
+# 15. Запуск PM2
+echo "=== Starting PM2 ==="
+pm2 start $APP_DIR/backend/dist/main.js --name money-backend
+pm2 save
+pm2 startup systemd -u root --hp /root
+
+echo ""
+echo "=========================================="
+echo "=== Setup completed! ==="
+echo "=========================================="
+echo ""
+echo "App URL: http://$SERVER_IP"
+echo "API URL: http://$SERVER_IP/api"
+echo "Docs: http://$SERVER_IP/docs"
+echo ""
+echo "Database password saved in: $APP_DIR/backend/.env"
 echo ""
 echo "Next steps:"
-echo "1. Clone repository: sudo -u $APP_USER git clone <repo> $APP_DIR"
-echo "2. Create .env file in $APP_DIR/backend/"
-echo "3. Run: cd $APP_DIR/backend && npm ci && npx prisma migrate deploy && npm run build"
-echo "4. Run: cd $APP_DIR/frontend && npm ci && npm run build"
-echo "5. Start PM2: pm2 start $APP_DIR/backend/dist/main.js --name money-backend"
-echo "6. Setup SSL: certbot --nginx -d $DOMAIN"
-echo "7. Save PM2: pm2 save && pm2 startup"
+echo "1. Add domain and run: certbot --nginx -d yourdomain.com"
+echo "2. Update FRONTEND_URL in $APP_DIR/backend/.env"
+echo "3. pm2 restart money-backend"
