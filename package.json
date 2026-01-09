@@ -19,7 +19,8 @@
     "lint:frontend": "cd frontend && npm run lint",
     "db:migrate": "cd backend && npx prisma migrate dev",
     "db:seed": "cd backend && npx prisma db seed",
-    "db:studio": "cd backend && npx prisma studio"
+    "db:studio": "cd backend && npx prisma studio",
+    "prepare": "husky"
   },
   "keywords": [
     "finance",
@@ -29,9 +30,19 @@
   ],
   "author": "",
   "license": "ISC",
+  "lint-staged": {
+    "backend/src/**/*.ts": [
+      "eslint --fix"
+    ],
+    "frontend/src/**/*.{ts,tsx}": [
+      "eslint --fix"
+    ]
+  },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.3",
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7"
   }
 }
