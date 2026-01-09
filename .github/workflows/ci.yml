@@ -163,6 +163,7 @@ jobs:
           rsync -avz --delete backend/dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/backend/dist/
           rsync -avz --delete frontend/dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/frontend/dist/
           rsync -avz backend/prisma/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/backend/prisma/
+          rsync -avz backend/package.json backend/package-lock.json ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/backend/
 
       - name: Run migrations and restart
         uses: appleboy/ssh-action@v1.0.3
