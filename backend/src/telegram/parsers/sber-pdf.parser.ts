@@ -12,7 +12,6 @@ interface ParsedTransaction {
 
 // Sberbank categories that appear in statements
 const SBER_CATEGORIES = [
-  'Прочие расходы',
   'Супермаркеты',
   'Рестораны и кафе',
   'Перевод СБП',
@@ -21,7 +20,6 @@ const SBER_CATEGORIES = [
   'Выдача наличных',
   'Оплата по QR–коду СБП',
   'Оплата по QR-коду СБП',
-  'Прочие операции',
   'Автомобиль',
   'Одежда и аксессуары',
   'Отдых и развлечения',
@@ -31,6 +29,7 @@ const SBER_CATEGORIES = [
   'Транспорт',
   'ЖКХ',
   'Образование',
+  'Прочие расходы', // должен быть последним - fallback
 ];
 
 @Injectable()
@@ -173,12 +172,13 @@ export class SberPdfParser {
 
     let description = dateMatch[2].trim();
 
-    // Remove "Операция по карте ****XXXX" suffix
-    description = description.replace(
-      /\.\s*Операция\s+по\s+карте\s+\*+\d+$/,
-      '',
-    );
-    description = description.replace(/Операция\s+по\s+карте\s+\*+\d+$/, '');
+    // Remove various forms of "Операция по карте ****XXXX" suffix
+    // May have different spacing, line breaks, or partial text
+    description = description
+      .replace(/[.\s]*Операция\s*по\s*карте\s*\*+\d*\s*$/i, '')
+      .replace(/[.\s]*Операция\s*$/i, '') // Partial "Операция" at end
+      .replace(/[.\s]*Операция\s*по\s*$/i, '') // Partial "Операция по"
+      .replace(/[.\s]*Операция\s*по\s*карте\s*$/i, ''); // Without card number
 
     // Clean up description
     description = description.trim();
