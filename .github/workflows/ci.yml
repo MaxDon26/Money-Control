@@ -148,5 +148,5 @@ jobs:
             npm install --production
             npx prisma migrate deploy
             npx prisma generate
-            pm2 restart money-backend || pm2 start /var/www/money/backend/dist/main.js --name money-backend
+            pm2 restart money-backend || pm2 start /var/www/money/backend/dist/src/main.js --name money-backend
             echo "=== Deployment completed ==="
