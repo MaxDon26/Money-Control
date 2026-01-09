@@ -8,6 +8,8 @@ import { TinkoffParser } from './parsers/tinkoff.parser';
 import { SberParser } from './parsers/sber.parser';
 import { TinkoffPdfParser } from './parsers/tinkoff-pdf.parser';
 import { SberPdfParser } from './parsers/sber-pdf.parser';
+import { CategoryMapper } from './parsers/category-mapper';
+import { AiCategorizerService } from './ai/ai-categorizer.service';
 import { randomBytes } from 'crypto';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
 const { PDFParse } = require('pdf-parse');
@@ -41,6 +43,8 @@ export class TelegramService implements OnModuleInit {
     private sberParser: SberParser,
     private tinkoffPdfParser: TinkoffPdfParser,
     private sberPdfParser: SberPdfParser,
+    private categoryMapper: CategoryMapper,
+    private aiCategorizer: AiCategorizerService,
   ) {
     const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
     if (token) {
@@ -533,6 +537,58 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      // Step 1: Categorize all transactions using keyword matching
+      const categorizedTransactions = transactions.map((tx) => {
+        const categoryResult = this.categoryMapper.mapCategory(
+          tx.description,
+          tx.type,
+        );
+        return {
+          ...tx,
+          category: categoryResult.name,
+          confidence: categoryResult.confidence,
+        };
+      });
+
+      // Step 2: Collect low-confidence transactions for AI categorization
+      const lowConfidenceTransactions = categorizedTransactions.filter(
+        (tx) => tx.confidence === 'low',
+      );
+
+      let aiCategorized = 0;
+
+      // Step 3: Use AI for low-confidence transactions (if available)
+      if (lowConfidenceTransactions.length > 0 && this.aiCategorizer.isAvailable()) {
+        try {
+          await ctx.reply(
+            `🤖 Распознаю ${lowConfidenceTransactions.length} транзакций через AI...`,
+          );
+
+          const aiInput = lowConfidenceTransactions.map((tx) => ({
+            type: tx.type,
+            description: tx.description,
+          }));
+
+          const aiResults = await this.aiCategorizer.categorizeTransactions(aiInput);
+
+          // Update categories from AI results
+          for (const tx of lowConfidenceTransactions) {
+            const aiCategory = aiResults.get(tx.description);
+            if (aiCategory) {
+              tx.category = aiCategory;
+              aiCategorized++;
+            }
+          }
+
+          this.logger.log(
+            `AI categorized ${aiCategorized}/${lowConfidenceTransactions.length} transactions`,
+          );
+        } catch (error) {
+          this.logger.error('AI categorization failed, using defaults', error);
+          // Continue with default categories
+        }
+      }
+
       // Cache for categories to avoid repeated DB queries
       const categoryCache = new Map<string, string>(); // "type:name" -> categoryId
 
@@ -541,7 +597,7 @@ export class TelegramService implements OnModuleInit {
       let skipped = 0;
       let categoriesCreated = 0;
 
-      for (const tx of transactions) {
+      for (const tx of categorizedTransactions) {
         // Check for duplicates (same date, amount, description)
         const existing = await this.prisma.transaction.findFirst({
           where: {
@@ -557,8 +613,8 @@ export class TelegramService implements OnModuleInit {
           continue;
         }
 
-        // Get or create category from bank data
-        const categoryName = tx.category || 'Другое';
+        // Get or create category
+        const categoryName = tx.category;
         const cacheKey = `${tx.type}:${categoryName}`;
         let categoryId = categoryCache.get(cacheKey);
 
@@ -612,6 +668,7 @@ export class TelegramService implements OnModuleInit {
         imported++;
       }
 
+      // Build result message
       let message =
         `✅ Импорт из ${bankName} завершён!\n\n` +
         `📊 Результат:\n` +
@@ -623,7 +680,16 @@ export class TelegramService implements OnModuleInit {
         message += `\n• Создано категорий: ${categoriesCreated}`;
       }
 
-      message += `\n\n💡 Категории созданы из выписки банка. Вы можете редактировать их в приложении.`;
+      // AI stats
+      const keywordCategorized = transactions.length - lowConfidenceTransactions.length;
+      if (this.aiCategorizer.isAvailable()) {
+        message += `\n\n🤖 Категоризация:\n`;
+        message += `• По ключевым словам: ${keywordCategorized}\n`;
+        message += `• Через AI: ${aiCategorized}`;
+        if (lowConfidenceTransactions.length > aiCategorized) {
+          message += `\n• По умолчанию: ${lowConfidenceTransactions.length - aiCategorized}`;
+        }
+      }
 
       await ctx.reply(message);
     } catch (error) {

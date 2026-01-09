@@ -289,12 +289,15 @@ export default function TransactionsPage() {
       dataIndex: 'date',
       key: 'date',
       width: 110,
+      sorter: (a, b) => dayjs(a.date).unix() - dayjs(b.date).unix(),
+      defaultSortOrder: 'descend',
       render: (date: string) => dayjs(date).format('DD.MM.YYYY'),
     },
     {
       title: 'Категория',
       key: 'category',
       width: 150,
+      sorter: (a, b) => a.category.name.localeCompare(b.category.name),
       render: (_, record) => (
         <Space>
           <span>{record.category.icon}</span>
@@ -307,6 +310,7 @@ export default function TransactionsPage() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
+      sorter: (a, b) => (a.description || '').localeCompare(b.description || ''),
       render: (text) => text || '-',
     },
     {
@@ -328,6 +332,7 @@ export default function TransactionsPage() {
       title: 'Счёт',
       key: 'account',
       width: 140,
+      sorter: (a, b) => a.account.name.localeCompare(b.account.name),
       render: (_, record) => record.account.name,
     },
     {
@@ -335,6 +340,7 @@ export default function TransactionsPage() {
       key: 'amount',
       width: 140,
       align: 'right',
+      sorter: (a, b) => Number(a.amount) - Number(b.amount),
       render: (_, record) => {
         const isIncome = record.type === 'INCOME';
         const prefix = record.account.currency === 'RUB' ? '₽' : record.account.currency === 'USD' ? '$' : '€';
@@ -376,11 +382,14 @@ export default function TransactionsPage() {
       dataIndex: 'date',
       key: 'date',
       width: 110,
+      sorter: (a, b) => dayjs(a.date).unix() - dayjs(b.date).unix(),
+      defaultSortOrder: 'descend',
       render: (date: string) => dayjs(date).format('DD.MM.YYYY'),
     },
     {
       title: 'Со счёта',
       key: 'fromAccount',
+      sorter: (a, b) => a.fromAccount.name.localeCompare(b.fromAccount.name),
       render: (_, record) => record.fromAccount.name,
     },
     {
@@ -392,6 +401,7 @@ export default function TransactionsPage() {
     {
       title: 'На счёт',
       key: 'toAccount',
+      sorter: (a, b) => a.toAccount.name.localeCompare(b.toAccount.name),
       render: (_, record) => record.toAccount.name,
     },
     {
@@ -399,6 +409,7 @@ export default function TransactionsPage() {
       key: 'amount',
       width: 140,
       align: 'right',
+      sorter: (a, b) => Number(a.amount) - Number(b.amount),
       render: (_, record) => (
         <Tag color="blue" style={{ fontSize: 14 }}>
           {Number(record.amount).toLocaleString()} ₽
@@ -410,6 +421,7 @@ export default function TransactionsPage() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
+      sorter: (a, b) => (a.description || '').localeCompare(b.description || ''),
       render: (text) => text || '-',
     },
     {

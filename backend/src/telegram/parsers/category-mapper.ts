@@ -1,0 +1,793 @@
+import { Injectable } from '@nestjs/common';
+
+/**
+ * Universal category mapper for bank transactions
+ * Maps merchant descriptions to unified categories
+ *
+ * Categories are synchronized with AI categorization prompt
+ */
+
+export interface CategoryMapping {
+  name: string;
+  icon: string;
+  keywords: string[];
+}
+
+export interface CategoryResult {
+  name: string;
+  icon: string;
+  confidence: 'high' | 'low';
+}
+
+// Universal expense categories (synchronized with AI prompt)
+const EXPENSE_CATEGORIES: CategoryMapping[] = [
+  {
+    name: 'Супермаркеты',
+    icon: '🛒',
+    keywords: [
+      'magnit',
+      'магнит',
+      'perekrestok',
+      'перекресток',
+      'перекрёсток',
+      'pyaterochka',
+      'пятерочка',
+      'пятёрочка',
+      'lenta',
+      'лента',
+      'auchan',
+      'ашан',
+      'metro',
+      'метро',
+      'diksi',
+      'дикси',
+      'krasnoe&beloe',
+      'красное и белое',
+      'krasnoe beloe',
+      'vkusvill',
+      'вкусвилл',
+      'fixprice',
+      'фикс прайс',
+      'svetofor',
+      'светофор',
+      'pobeda',
+      'победа',
+      'bristol',
+      'бристоль',
+      'okey',
+      'окей',
+      'spar',
+      'спар',
+      'globus',
+      'глобус',
+      'selgros',
+      'зельгрос',
+      'azbuka vkusa',
+      'азбука вкуса',
+      'perekryostok',
+      'supermarket',
+      'супермаркет',
+      'grocery',
+      'produkty',
+      'продукты',
+    ],
+  },
+  {
+    name: 'Рестораны и кафе',
+    icon: '🍽️',
+    keywords: [
+      'restaurant',
+      'ресторан',
+      'restoran',
+      'cafe',
+      'кафе',
+      'coffee',
+      'кофе',
+      'kofe',
+      'kebab',
+      'кебаб',
+      'шаурма',
+      'shawarma',
+      'pizza',
+      'пицца',
+      'burger',
+      'бургер',
+      'mcdonalds',
+      'макдональдс',
+      'kfc',
+      'кфс',
+      'stolovaya',
+      'столовая',
+      'canteen',
+      'bistro',
+      'бистро',
+      'sushi',
+      'суши',
+      'bar',
+      'бар',
+      'pub',
+      'паб',
+      'domino',
+      'домино',
+      'dodo',
+      'додо',
+      'samurai',
+      'самурай',
+      'oazis',
+      'оазис',
+      'edem',
+      'эдем',
+      'royal kebab',
+      'marevka',
+      'food',
+      'фуд',
+      'lunch',
+      'обед',
+      'dinner',
+      'ужин',
+      'breakfast',
+      'завтрак',
+    ],
+  },
+  {
+    name: 'Здоровье и аптеки',
+    icon: '💊',
+    keywords: [
+      'apteka',
+      'аптека',
+      'pharmacy',
+      'aprel',
+      'апрель',
+      'bioni',
+      'биони',
+      'rigla',
+      'ригла',
+      'doktor',
+      'доктор',
+      'doctor',
+      'clinic',
+      'клиника',
+      'klinika',
+      'hospital',
+      'больница',
+      'bolnica',
+      'medical',
+      'медицина',
+      'medicina',
+      'health',
+      'здоровье',
+      'zdorovye',
+      'dental',
+      'стоматолог',
+      'stomatolog',
+      'optic',
+      'оптика',
+      'optika',
+      'gorzdrav',
+      'горздрав',
+      'vita',
+      'вита',
+      'nevis',
+      'невис',
+      'farm',
+      'фарм',
+      'pharm',
+      'lekar',
+      'лекарь',
+      'asna',
+      'асна',
+      'skkod',
+      'gbuz',
+      'vash doktor',
+      'beauty',
+      'красота',
+      'krasota',
+      'salon',
+      'салон',
+      'spa',
+      'спа',
+      'barbershop',
+      'барбершоп',
+      'haircut',
+      'стрижка',
+      'strizhka',
+      'manicure',
+      'маникюр',
+      'manikyur',
+      'cosmetic',
+      'косметика',
+      'kosmetika',
+      'letual',
+      'летуаль',
+      'rivgosh',
+      'рив гош',
+    ],
+  },
+  {
+    name: 'Транспорт и авто',
+    icon: '🚗',
+    keywords: [
+      'azs',
+      'азс',
+      'fuel',
+      'топливо',
+      'benzin',
+      'бензин',
+      'petrol',
+      'gas station',
+      'заправка',
+      'zapravka',
+      'lukoil',
+      'лукойл',
+      'gazprom',
+      'газпром',
+      'rosneft',
+      'роснефть',
+      'shell',
+      'шелл',
+      'bp',
+      'taxi',
+      'такси',
+      'taksi',
+      'yandex taxi',
+      'яндекс такси',
+      'uber',
+      'убер',
+      'citymobil',
+      'ситимобил',
+      'bolt',
+      'болт',
+      'avtomojka',
+      'автомойка',
+      'car wash',
+      'moyka',
+      'мойка',
+      'parking',
+      'парковка',
+      'parkovka',
+      'rnazk',
+      'rn azk',
+      'avto',
+      'авто',
+      'auto',
+      'service',
+      'сервис',
+      'oil',
+      'масло',
+      'tire',
+      'шина',
+    ],
+  },
+  {
+    name: 'Связь и интернет',
+    icon: '📱',
+    keywords: [
+      'beeline',
+      'билайн',
+      'mts',
+      'мтс',
+      'megafon',
+      'мегафон',
+      'tele2',
+      'теле2',
+      'rostelecom',
+      'ростелеком',
+      'yota',
+      'йота',
+      'mobile',
+      'мобильный',
+      'mobilnyj',
+      'telecom',
+      'телеком',
+      'internet',
+      'интернет',
+      'mbank',
+      'связь',
+      'svyaz',
+      'sms',
+      'смс',
+    ],
+  },
+  {
+    name: 'Подписки и сервисы',
+    icon: '🌐',
+    keywords: [
+      'netflix',
+      'нетфликс',
+      'youtube',
+      'ютуб',
+      'spotify',
+      'спотифай',
+      'apple',
+      'эпл',
+      'google',
+      'гугл',
+      'yandex plus',
+      'яндекс плюс',
+      'subscription',
+      'подписка',
+      'podpiska',
+      'premium',
+      'премиум',
+      'reg.ru',
+      'рег.ру',
+      'boosty',
+      'бусти',
+      'patreon',
+      'патреон',
+      'steam',
+      'стим',
+      'playstation',
+      'плейстейшн',
+      'xbox',
+      'иксбокс',
+      'плати по миру',
+      'timeweb',
+      'hosting',
+      'хостинг',
+      'domain',
+      'домен',
+      'vps',
+      'server',
+      'сервер',
+    ],
+  },
+  {
+    name: 'Одежда и обувь',
+    icon: '👕',
+    keywords: [
+      'zara',
+      'зара',
+      'hm',
+      'h&m',
+      'asos',
+      'асос',
+      'lamoda',
+      'ламода',
+      'wildberries',
+      'вайлдберриз',
+      'wb',
+      'вб',
+      'ozon',
+      'озон',
+      'clothing',
+      'одежда',
+      'odezhda',
+      'shoes',
+      'обувь',
+      'obuv',
+      'fashion',
+      'мода',
+      'moda',
+      'sportmaster',
+      'спортмастер',
+      'adidas',
+      'адидас',
+      'nike',
+      'найк',
+      'uniqlo',
+      'юникло',
+      'bershka',
+      'бершка',
+      'pullandbear',
+      'пул энд бир',
+      'elegiya',
+      'элегия',
+    ],
+  },
+  {
+    name: 'Развлечения',
+    icon: '🎮',
+    keywords: [
+      'cinema',
+      'кино',
+      'kino',
+      'theatre',
+      'театр',
+      'teatr',
+      'concert',
+      'концерт',
+      'koncert',
+      'museum',
+      'музей',
+      'muzey',
+      'park',
+      'парк',
+      'zoo',
+      'зоопарк',
+      'game',
+      'игра',
+      'igra',
+      'gaming',
+      'гейминг',
+      'entertainment',
+      'развлечение',
+      'razvlechenie',
+      'bowling',
+      'боулинг',
+      'billiard',
+      'бильярд',
+      'karaoke',
+      'караоке',
+      'quest',
+      'квест',
+      'club',
+      'клуб',
+      'disco',
+      'диско',
+      'shariki',
+      'шарики',
+    ],
+  },
+  {
+    name: 'Жильё и ЖКХ',
+    icon: '🏠',
+    keywords: [
+      'ikea',
+      'икеа',
+      'leroy',
+      'леруа',
+      'obi',
+      'оби',
+      'petrovich',
+      'петрович',
+      'stroymarket',
+      'стройматериал',
+      'stroymaterial',
+      'building',
+      'строительный',
+      'stroitelnyj',
+      'remont',
+      'ремонт',
+      'repair',
+      'furniture',
+      'мебель',
+      'mebel',
+      'home',
+      'дом',
+      'dom',
+      'houseware',
+      'хозтовары',
+      'hoztovary',
+      'birloga',
+      'берлога',
+      'zhkh',
+      'жкх',
+      'communal',
+      'коммунальн',
+      'kommunaln',
+      'electricity',
+      'электричество',
+      'elektrichestvo',
+      'water',
+      'вода',
+      'voda',
+      'heating',
+      'отопление',
+      'otoplenie',
+      'rent',
+      'аренда',
+      'arenda',
+      'utility',
+      'услуги',
+      'uslugi',
+      'uk ',
+      'ук ',
+      'tszh',
+      'тсж',
+      'mos.ru',
+      'мос.ру',
+      'gosuslugi',
+      'госуслуги',
+    ],
+  },
+  {
+    name: 'Техника и электроника',
+    icon: '📱',
+    keywords: [
+      'eldorado',
+      'эльдорадо',
+      'mvideo',
+      'мвидео',
+      'm.video',
+      'м.видео',
+      'dns',
+      'днс',
+      'citilink',
+      'ситилинк',
+      'technopark',
+      'технопарк',
+      're:store',
+      'restore',
+      'electronics',
+      'электроника',
+      'elektronika',
+      'gadget',
+      'гаджет',
+      'phone',
+      'телефон',
+      'telefon',
+      'computer',
+      'компьютер',
+      'kompyuter',
+      'laptop',
+      'ноутбук',
+      'noutbuk',
+    ],
+  },
+  {
+    name: 'Образование',
+    icon: '📚',
+    keywords: [
+      'education',
+      'образование',
+      'obrazovanie',
+      'school',
+      'школа',
+      'shkola',
+      'university',
+      'университет',
+      'universitet',
+      'college',
+      'колледж',
+      'kolledzh',
+      'course',
+      'курс',
+      'kurs',
+      'training',
+      'обучение',
+      'obuchenie',
+      'book',
+      'книга',
+      'kniga',
+      'library',
+      'библиотека',
+      'biblioteka',
+      'study',
+      'учеба',
+      'ucheba',
+      'tutor',
+      'репетитор',
+      'repetitor',
+    ],
+  },
+  {
+    name: 'Переводы',
+    icon: '💸',
+    keywords: [
+      'перевод',
+      'perevod',
+      'transfer',
+      'трансфер',
+      'сбп',
+      'sbp',
+      'p2p',
+      'с карты',
+      'на карту',
+      's karty',
+      'na kartu',
+      'внешний перевод',
+      'внутренний перевод',
+      'внутрибанковский',
+    ],
+  },
+  {
+    name: 'Снятие наличных',
+    icon: '💵',
+    keywords: [
+      'atm',
+      'банкомат',
+      'bankomat',
+      'cash',
+      'наличные',
+      'nalichnye',
+      'withdrawal',
+      'снятие',
+      'snyatie',
+      'выдача',
+      'vydacha',
+    ],
+  },
+];
+
+// Universal income categories (synchronized with AI prompt)
+const INCOME_CATEGORIES: CategoryMapping[] = [
+  {
+    name: 'Зарплата и доход',
+    icon: '💰',
+    keywords: [
+      'salary',
+      'зарплата',
+      'zarplata',
+      'payroll',
+      'оклад',
+      'oklad',
+      'wage',
+      'заработн',
+      'zarabotn',
+      'rocket work',
+      'rocketwork',
+      'гонорар',
+      'honorar',
+      'выплата',
+      'vyplata',
+    ],
+  },
+  {
+    name: 'Переводы',
+    icon: '💸',
+    keywords: [
+      'перевод',
+      'perevod',
+      'transfer',
+      'трансфер',
+      'сбп',
+      'sbp',
+      'p2p',
+      'от ',
+      'внешний перевод',
+      'внутренний перевод',
+      'внутрибанковский',
+      'пополнение',
+      'popolnenie',
+    ],
+  },
+  {
+    name: 'Кэшбэк и возврат',
+    icon: '🔄',
+    keywords: [
+      'refund',
+      'возврат',
+      'vozvrat',
+      'cashback',
+      'кэшбэк',
+      'кешбэк',
+      'return',
+      'отмена',
+      'otmena',
+      'бонус',
+      'bonus',
+      'interest',
+      'процент',
+      'procent',
+      'dividend',
+      'дивиденд',
+      'вклад',
+      'vklad',
+      'deposit',
+      'депозит',
+    ],
+  },
+];
+
+// Default categories (synchronized with AI prompt)
+const DEFAULT_EXPENSE: CategoryResult = {
+  name: 'Прочие расходы',
+  icon: '📦',
+  confidence: 'low',
+};
+
+const DEFAULT_INCOME: CategoryResult = {
+  name: 'Прочие доходы',
+  icon: '📥',
+  confidence: 'low',
+};
+
+@Injectable()
+export class CategoryMapper {
+  /**
+   * Map description to category for expense transactions
+   * Returns confidence level to indicate if AI fallback might be needed
+   */
+  mapExpenseCategory(description: string): CategoryResult {
+    const lowerDesc = description.toLowerCase();
+
+    for (const category of EXPENSE_CATEGORIES) {
+      for (const keyword of category.keywords) {
+        if (lowerDesc.includes(keyword.toLowerCase())) {
+          return {
+            name: category.name,
+            icon: category.icon,
+            confidence: 'high',
+          };
+        }
+      }
+    }
+
+    return DEFAULT_EXPENSE;
+  }
+
+  /**
+   * Map description to category for income transactions
+   * Returns confidence level to indicate if AI fallback might be needed
+   */
+  mapIncomeCategory(description: string): CategoryResult {
+    const lowerDesc = description.toLowerCase();
+
+    for (const category of INCOME_CATEGORIES) {
+      for (const keyword of category.keywords) {
+        if (lowerDesc.includes(keyword.toLowerCase())) {
+          return {
+            name: category.name,
+            icon: category.icon,
+            confidence: 'high',
+          };
+        }
+      }
+    }
+
+    return DEFAULT_INCOME;
+  }
+
+  /**
+   * Map description to category based on transaction type
+   * Returns confidence level to indicate if AI fallback might be needed
+   */
+  mapCategory(description: string, type: 'INCOME' | 'EXPENSE'): CategoryResult {
+    if (type === 'INCOME') {
+      return this.mapIncomeCategory(description);
+    }
+    return this.mapExpenseCategory(description);
+  }
+
+  /**
+   * Check if result needs AI categorization (low confidence)
+   */
+  needsAiCategorization(result: CategoryResult): boolean {
+    return result.confidence === 'low';
+  }
+
+  /**
+   * Get all available expense category names
+   */
+  getExpenseCategories(): string[] {
+    return [...EXPENSE_CATEGORIES.map((c) => c.name), DEFAULT_EXPENSE.name];
+  }
+
+  /**
+   * Get all available income category names
+   */
+  getIncomeCategories(): string[] {
+    return [...INCOME_CATEGORIES.map((c) => c.name), DEFAULT_INCOME.name];
+  }
+
+  /**
+   * Normalize Sberbank category to universal category
+   */
+  normalizeSberCategory(
+    sberCategory: string,
+    description: string,
+    type: 'INCOME' | 'EXPENSE',
+  ): CategoryResult {
+    // Map Sberbank-specific categories to universal ones
+    const sberToUniversal: Record<string, { name: string; icon: string }> = {
+      Супермаркеты: { name: 'Супермаркеты', icon: '🛒' },
+      'Рестораны и кафе': { name: 'Рестораны и кафе', icon: '🍽️' },
+      'Перевод СБП': { name: 'Переводы', icon: '💸' },
+      'Перевод с карты': { name: 'Переводы', icon: '💸' },
+      'Перевод на карту': { name: 'Переводы', icon: '💸' },
+      'Выдача наличных': { name: 'Снятие наличных', icon: '💵' },
+      'Оплата по QR–коду СБП': { name: 'Переводы', icon: '💸' },
+      'Оплата по QR-коду СБП': { name: 'Переводы', icon: '💸' },
+      Автомобиль: { name: 'Транспорт и авто', icon: '🚗' },
+      'Одежда и аксессуары': { name: 'Одежда и обувь', icon: '👕' },
+      'Отдых и развлечения': { name: 'Развлечения', icon: '🎮' },
+      'Здоровье и красота': { name: 'Здоровье и аптеки', icon: '💊' },
+      'Все для дома': { name: 'Жильё и ЖКХ', icon: '🏠' },
+      'Связь и телеком': { name: 'Связь и интернет', icon: '📱' },
+      Транспорт: { name: 'Транспорт и авто', icon: '🚗' },
+      ЖКХ: { name: 'Жильё и ЖКХ', icon: '🏠' },
+      Образование: { name: 'Образование', icon: '📚' },
+      'Прочие расходы': { name: 'Прочие расходы', icon: '📦' },
+    };
+
+    // First try to map Sberbank category
+    if (sberCategory && sberToUniversal[sberCategory]) {
+      const mapped = sberToUniversal[sberCategory];
+      return { ...mapped, confidence: 'high' };
+    }
+
+    // If no match, try to determine from description
+    return this.mapCategory(description, type);
+  }
+}

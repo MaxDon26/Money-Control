@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { CategoryMapper } from './category-mapper';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
 const { PDFParse } = require('pdf-parse');
 
@@ -29,11 +30,13 @@ const SBER_CATEGORIES = [
   'Транспорт',
   'ЖКХ',
   'Образование',
-  'Прочие расходы', // должен быть последним - fallback
+  'Прочие расходы', // should be last - fallback
 ];
 
 @Injectable()
 export class SberPdfParser {
+  constructor(private categoryMapper: CategoryMapper) {}
+
   /**
    * Check if PDF content is from Sberbank
    */
@@ -45,7 +48,8 @@ export class SberPdfParser {
         lowerText.includes('пао сбербанк') ||
         lowerText.includes('сбер')) &&
       !lowerText.includes('тинькофф') &&
-      !lowerText.includes('т-банк')
+      !lowerText.includes('т-банк') &&
+      !lowerText.includes('тбанк')
     );
   }
 
@@ -91,12 +95,19 @@ export class SberPdfParser {
         // Check if next line is the description line
         const descData = this.parseDescriptionLine(line2);
         if (descData) {
+          // Normalize Sberbank category to universal category
+          const categoryInfo = this.categoryMapper.normalizeSberCategory(
+            txData.category,
+            descData.description,
+            txData.isIncome ? 'INCOME' : 'EXPENSE',
+          );
+
           transactions.push({
             date: txData.date,
             amount: Math.abs(txData.amount),
             type: txData.isIncome ? 'INCOME' : 'EXPENSE',
             description: descData.description.substring(0, 500),
-            category: txData.category,
+            category: categoryInfo.name,
           });
           i++; // Skip the description line
         }
@@ -209,23 +220,32 @@ export class SberPdfParser {
 
         if (date && amount !== null && amount !== 0) {
           // Try to extract category from middle part
-          let category = '';
+          let sberCategory = '';
           let description = middlePart;
 
           for (const cat of SBER_CATEGORIES) {
             if (middlePart.includes(cat)) {
-              category = cat;
+              sberCategory = cat;
               description = middlePart.replace(cat, '').trim();
               break;
             }
           }
 
+          const type = amountStr.includes('+') ? 'INCOME' : 'EXPENSE';
+
+          // Normalize category
+          const categoryInfo = this.categoryMapper.normalizeSberCategory(
+            sberCategory,
+            description,
+            type,
+          );
+
           transactions.push({
             date,
             amount: Math.abs(amount),
-            type: amountStr.includes('+') ? 'INCOME' : 'EXPENSE',
+            type,
             description: description.substring(0, 500),
-            category: category || undefined,
+            category: categoryInfo.name,
           });
         }
       }

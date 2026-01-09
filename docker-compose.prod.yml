@@ -25,6 +25,9 @@ services:
       JWT_REFRESH_EXPIRATION: 7d
       NODE_ENV: production
       PORT: 4000
+      # AI categorization
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      AI_PROVIDER: ${AI_PROVIDER:-anthropic}
     depends_on:
       - postgres
     networks:
