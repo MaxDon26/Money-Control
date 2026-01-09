@@ -57,7 +57,7 @@ export class TinkoffParser {
       }
     }
 
-    for (const record of records) {
+    for (const record of records as Record<string, string>[]) {
       try {
         const tx = this.parseRecord(record);
         if (tx) {

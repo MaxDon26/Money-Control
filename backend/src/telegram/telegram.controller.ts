@@ -1,12 +1,8 @@
-import { Controller, Post, Get, Delete, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Delete, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { Request } from 'express';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards';
+import { CurrentUser } from '../common/decorators';
 import { TelegramService } from './telegram.service';
-
-interface AuthenticatedRequest extends Request {
-  user: { id: string };
-}
 
 @ApiTags('telegram')
 @Controller('telegram')
@@ -17,8 +13,8 @@ export class TelegramController {
 
   @Post('link-code')
   @ApiOperation({ summary: 'Generate a code to link Telegram account' })
-  async generateLinkCode(@Req() req: AuthenticatedRequest) {
-    const code = await this.telegramService.generateLinkCode(req.user.id);
+  async generateLinkCode(@CurrentUser('id') userId: string) {
+    const code = await this.telegramService.generateLinkCode(userId);
     const botUsername = this.telegramService.getBotUsername();
 
     return {
@@ -31,14 +27,14 @@ export class TelegramController {
 
   @Get('status')
   @ApiOperation({ summary: 'Get Telegram link status' })
-  async getLinkStatus(@Req() req: AuthenticatedRequest) {
-    return this.telegramService.getLinkStatus(req.user.id);
+  async getLinkStatus(@CurrentUser('id') userId: string) {
+    return this.telegramService.getLinkStatus(userId);
   }
 
   @Delete('unlink')
   @ApiOperation({ summary: 'Unlink Telegram account' })
-  async unlinkTelegram(@Req() req: AuthenticatedRequest) {
-    const success = await this.telegramService.unlinkTelegram(req.user.id);
+  async unlinkTelegram(@CurrentUser('id') userId: string) {
+    const success = await this.telegramService.unlinkTelegram(userId);
     return { success };
   }
 }
