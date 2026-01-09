@@ -72,48 +72,81 @@ jobs:
         run: npm run build
         working-directory: frontend
 
+      # Upload build artifacts
+      - name: Upload backend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: backend/dist
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Upload Prisma files
+        uses: actions/upload-artifact@v4
+        with:
+          name: prisma-files
+          path: |
+            backend/prisma/schema.prisma
+            backend/prisma/migrations
+
   deploy:
     needs: lint-and-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - name: Deploy to VPS via SSH
+      - uses: actions/checkout@v4
+
+      - name: Download backend build
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist
+          path: backend/dist
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Download Prisma files
+        uses: actions/download-artifact@v4
+        with:
+          name: prisma-files
+          path: backend/prisma
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          # Sync backend dist
+          rsync -avz --delete backend/dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/backend/dist/
+
+          # Sync frontend dist
+          rsync -avz --delete frontend/dist/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/frontend/dist/
+
+          # Sync Prisma files
+          rsync -avz backend/prisma/ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/money/backend/prisma/
+
+      - name: Run migrations and restart
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
           script: |
-            set -e
-            echo "=== Starting deployment ==="
-
-            cd /var/www/money
-
-            echo "=== Pulling latest changes ==="
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== Installing backend dependencies ==="
-            cd backend
-            npm ci --production=false
-
-            echo "=== Running database migrations ==="
+            cd /var/www/money/backend
+            npm install --production
             npx prisma migrate deploy
             npx prisma generate
-
-            echo "=== Building backend ==="
-            npm run build
-
-            echo "=== Installing frontend dependencies ==="
-            cd ../frontend
-            npm ci
-
-            echo "=== Building frontend ==="
-            NODE_OPTIONS="--max-old-space-size=1024" npm run build
-
-            echo "=== Restarting services ==="
-            pm2 restart money-backend --update-env || pm2 start /var/www/money/backend/dist/main.js --name money-backend
-
+            pm2 restart money-backend || pm2 start /var/www/money/backend/dist/main.js --name money-backend
             echo "=== Deployment completed ==="
