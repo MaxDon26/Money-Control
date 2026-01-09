@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Typography,
   Form,
@@ -13,11 +13,12 @@ import {
   Alert,
   Tag,
   Grid,
+  Spin,
 } from 'antd';
-import { UserOutlined, MailOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { UserOutlined, MailOutlined, CheckCircleOutlined, ExclamationCircleOutlined, SendOutlined, DisconnectOutlined, CopyOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/entities/user';
-import { authApi } from '@/shared/api';
+import { authApi, telegramApi, TelegramLinkStatus } from '@/shared/api';
 import { SEO } from '@/shared/ui';
 
 const { Title } = Typography;
@@ -47,6 +48,63 @@ export default function SettingsPage() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [isVerificationLoading, setIsVerificationLoading] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<TelegramLinkStatus | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(true);
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [botLink, setBotLink] = useState<string | null>(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [isUnlinking, setIsUnlinking] = useState(false);
+
+  useEffect(() => {
+    loadTelegramStatus();
+  }, []);
+
+  const loadTelegramStatus = async () => {
+    try {
+      const status = await telegramApi.getStatus();
+      setTelegramStatus(status);
+    } catch {
+      // Ignore errors
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
+
+  const handleGenerateLinkCode = async () => {
+    setIsGeneratingCode(true);
+    try {
+      const result = await telegramApi.generateLinkCode();
+      setLinkCode(result.code);
+      setBotLink(result.botLink);
+      message.success('Код создан! Действует 15 минут.');
+    } catch {
+      message.error('Ошибка при создании кода');
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
+  const handleUnlinkTelegram = async () => {
+    setIsUnlinking(true);
+    try {
+      await telegramApi.unlink();
+      setTelegramStatus({ linked: false });
+      setLinkCode(null);
+      setBotLink(null);
+      message.success('Telegram отвязан');
+    } catch {
+      message.error('Ошибка при отвязке');
+    } finally {
+      setIsUnlinking(false);
+    }
+  };
+
+  const copyCode = () => {
+    if (linkCode) {
+      navigator.clipboard.writeText(linkCode);
+      message.success('Код скопирован');
+    }
+  };
 
   const handleProfileSubmit = async (values: ProfileFormData) => {
     setIsProfileLoading(true);
@@ -179,6 +237,83 @@ export default function SettingsPage() {
             </Button>
           </Form.Item>
         </Form>
+      </Card>
+
+      <Card title="Telegram" style={{ marginBottom: 16 }}>
+        {telegramLoading ? (
+          <div style={{ textAlign: 'center', padding: 20 }}>
+            <Spin />
+          </div>
+        ) : telegramStatus?.linked ? (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Alert
+              message="Telegram подключён"
+              description={
+                <>
+                  Аккаунт: {telegramStatus.username ? `@${telegramStatus.username}` : telegramStatus.firstName || 'Пользователь'}
+                  <br />
+                  Вы можете отправлять CSV-выписки из Тинькофф и Сбербанка боту для импорта транзакций.
+                </>
+              }
+              type="success"
+              showIcon
+              icon={<SendOutlined />}
+            />
+            <Button
+              danger
+              icon={<DisconnectOutlined />}
+              onClick={handleUnlinkTelegram}
+              loading={isUnlinking}
+            >
+              Отвязать Telegram
+            </Button>
+          </Space>
+        ) : (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Alert
+              message="Импорт банковских выписок"
+              description="Подключите Telegram-бота для быстрого импорта транзакций из CSV-выписок Тинькофф и Сбербанка."
+              type="info"
+              showIcon
+              icon={<SendOutlined />}
+            />
+            {linkCode ? (
+              <div style={{ background: '#f5f5f5', padding: 16, borderRadius: 8 }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <div>
+                    <strong>Код привязки:</strong>
+                    <div style={{ fontSize: 24, fontFamily: 'monospace', marginTop: 8 }}>
+                      {linkCode}
+                      <Button
+                        type="text"
+                        icon={<CopyOutlined />}
+                        onClick={copyCode}
+                        style={{ marginLeft: 8 }}
+                      />
+                    </div>
+                  </div>
+                  {botLink && (
+                    <Button type="primary" href={botLink} target="_blank">
+                      Открыть бота в Telegram
+                    </Button>
+                  )}
+                  <div style={{ color: '#888', fontSize: 12 }}>
+                    Код действует 15 минут. Отправьте его боту или перейдите по ссылке выше.
+                  </div>
+                </Space>
+              </div>
+            ) : (
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleGenerateLinkCode}
+                loading={isGeneratingCode}
+              >
+                Подключить Telegram
+              </Button>
+            )}
+          </Space>
+        )}
       </Card>
 
       <Card title="Безопасность">

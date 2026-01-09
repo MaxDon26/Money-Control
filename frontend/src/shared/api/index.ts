@@ -44,3 +44,5 @@ export type {
 } from './recurring';
 export { tagsApi } from './tags';
 export type { Tag, CreateTagData } from './tags';
+export { telegramApi } from './telegram';
+export type { TelegramLinkStatus, TelegramLinkCode } from './telegram';
