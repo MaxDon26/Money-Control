@@ -13,7 +13,7 @@ interface SEOProps {
 }
 
 const BASE_TITLE = 'Money Control';
-const BASE_URL = 'https://money-control.app';
+const BASE_URL = 'https://moneycontrols.ru';
 const DEFAULT_DESCRIPTION = 'Приложение для учёта личных финансов. Контролируйте доходы, расходы, бюджеты.';
 const DEFAULT_IMAGE = '/pwa-512x512.png';
 
