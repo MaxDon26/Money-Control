@@ -17,6 +17,7 @@ import {
   Spin,
   Empty,
   DatePicker,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -36,6 +37,7 @@ import {
 import { SEO } from '@/shared/ui';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const getProgressStatus = (percentage: number) => {
   if (percentage >= 100) return 'exception' as const;
@@ -56,6 +58,8 @@ const monthNames = [
 
 export default function BudgetsPage() {
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [currentDate, setCurrentDate] = useState(() => dayjs());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
@@ -208,28 +212,32 @@ export default function BudgetsPage() {
         noIndex
       />
       <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={2} style={{ margin: 0 }}>Бюджеты</Title>
-        <Space>
-          <Button
-            icon={<CopyOutlined />}
-            onClick={() => copyMutation.mutate()}
-            loading={copyMutation.isPending}
-          >
-            Из прошлого месяца
-          </Button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>Бюджеты</Title>
+        <Space wrap size={isMobile ? 'small' : 'middle'}>
+          {!isMobile && (
+            <Button
+              icon={<CopyOutlined />}
+              onClick={() => copyMutation.mutate()}
+              loading={copyMutation.isPending}
+            >
+              Из прошлого месяца
+            </Button>
+          )}
           <Button
             onClick={handleOpenTotalBudgetModal}
+            size={isMobile ? 'small' : 'middle'}
           >
-            {progress?.totalBudget ? 'Изменить общий бюджет' : 'Общий бюджет'}
+            {progress?.totalBudget ? (isMobile ? 'Общий' : 'Изменить общий бюджет') : (isMobile ? 'Общий' : 'Общий бюджет')}
           </Button>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => handleOpenModal()}
             disabled={availableCategories.length === 0}
+            size={isMobile ? 'small' : 'middle'}
           >
-            Добавить
+            {isMobile ? '' : 'Добавить'}
           </Button>
         </Space>
       </div>
@@ -400,6 +408,7 @@ export default function BudgetsPage() {
         open={isModalOpen}
         onCancel={handleCloseModal}
         footer={null}
+        width={isMobile ? '95%' : 500}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           {!isTotalBudgetMode && (

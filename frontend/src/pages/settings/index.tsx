@@ -12,6 +12,7 @@ import {
   Space,
   Alert,
   Tag,
+  Grid,
 } from 'antd';
 import { UserOutlined, MailOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +21,7 @@ import { authApi } from '@/shared/api';
 import { SEO } from '@/shared/ui';
 
 const { Title } = Typography;
+const { useBreakpoint } = Grid;
 
 interface ProfileFormData {
   name: string;
@@ -33,6 +35,8 @@ interface PasswordFormData {
 }
 
 export default function SettingsPage() {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const navigate = useNavigate();
   const { user, updateProfile, logout } = useAuthStore();
   const [profileForm] = Form.useForm();
@@ -111,7 +115,7 @@ export default function SettingsPage() {
         noIndex
       />
       <div style={{ maxWidth: 600 }}>
-      <Title level={2}>Настройки</Title>
+      <Title level={isMobile ? 3 : 2}>Настройки</Title>
 
       <Card title="Профиль" style={{ marginBottom: 16 }}>
         <Form
@@ -203,6 +207,7 @@ export default function SettingsPage() {
           passwordForm.resetFields();
         }}
         footer={null}
+        width={isMobile ? '95%' : 400}
       >
         <Form form={passwordForm} layout="vertical" onFinish={handlePasswordSubmit}>
           <Form.Item
@@ -250,6 +255,7 @@ export default function SettingsPage() {
         title="Удаление аккаунта"
         open={isDeleteModalOpen}
         onCancel={() => setIsDeleteModalOpen(false)}
+        width={isMobile ? '95%' : 400}
         footer={[
           <Button key="cancel" onClick={() => setIsDeleteModalOpen(false)}>
             Отмена

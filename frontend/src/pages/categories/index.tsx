@@ -15,6 +15,7 @@ import {
   Spin,
   Empty,
   Tooltip,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -26,6 +27,7 @@ import { categoriesApi, Category, CategoryType, CreateCategoryData } from '@/sha
 import { SEO } from '@/shared/ui';
 
 const { Title } = Typography;
+const { useBreakpoint } = Grid;
 
 const categoryTypeLabels: Record<CategoryType, string> = {
   INCOME: 'Доход',
@@ -166,6 +168,8 @@ const CategoryList = ({ categories, onEdit, onDelete, onAddChild }: CategoryList
 
 export default function CategoriesPage() {
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [parentCategory, setParentCategory] = useState<Category | null>(null);
@@ -307,13 +311,15 @@ export default function CategoriesPage() {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 16,
+          flexWrap: 'wrap',
+          gap: 8,
         }}
       >
-        <Title level={2} style={{ margin: 0 }}>
+        <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>
           Категории
         </Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
-          Добавить категорию
+          {isMobile ? '' : 'Добавить категорию'}
         </Button>
       </div>
 
@@ -330,6 +336,7 @@ export default function CategoriesPage() {
         open={isModalOpen}
         onCancel={handleCloseModal}
         footer={null}
+        width={isMobile ? '95%' : 500}
       >
         <Form
           form={form}

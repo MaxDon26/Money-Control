@@ -19,6 +19,7 @@ import {
   Spin,
   Empty,
   Tooltip,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -42,6 +43,7 @@ import {
 import { SEO } from '@/shared/ui';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const frequencyLabels: Record<Frequency, string> = {
   DAILY: 'Ежедневно',
@@ -57,6 +59,8 @@ const typeLabels: Record<TransactionType, string> = {
 
 export default function RecurringPage() {
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<RecurringPayment | null>(null);
   const [form] = Form.useForm();
@@ -304,10 +308,10 @@ export default function RecurringPage() {
         noIndex
       />
       <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={2} style={{ margin: 0 }}>Регулярные платежи</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>{isMobile ? 'Регулярные' : 'Регулярные платежи'}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
-          Добавить
+          {isMobile ? '' : 'Добавить'}
         </Button>
       </div>
 
@@ -318,25 +322,27 @@ export default function RecurringPage() {
       ) : (
         <>
           {activePayments.length > 0 && (
-            <Card title="Активные" style={{ marginBottom: 16 }}>
+            <Card title="Активные" size={isMobile ? 'small' : 'default'} style={{ marginBottom: 16 }}>
               <Table
                 columns={columns}
                 dataSource={activePayments}
                 rowKey="id"
                 pagination={false}
                 size="small"
+                scroll={{ x: 800 }}
               />
             </Card>
           )}
 
           {inactivePayments.length > 0 && (
-            <Card title="Приостановленные">
+            <Card title="Приостановленные" size={isMobile ? 'small' : 'default'}>
               <Table
                 columns={columns}
                 dataSource={inactivePayments}
                 rowKey="id"
                 pagination={false}
                 size="small"
+                scroll={{ x: 800 }}
               />
             </Card>
           )}
@@ -344,11 +350,11 @@ export default function RecurringPage() {
       )}
 
       <Modal
-        title={editingPayment ? 'Редактировать платёж' : 'Новый регулярный платёж'}
+        title={editingPayment ? 'Редактировать платёж' : (isMobile ? 'Новый платёж' : 'Новый регулярный платёж')}
         open={isModalOpen}
         onCancel={handleCloseModal}
         footer={null}
-        width={500}
+        width={isMobile ? '95%' : 500}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

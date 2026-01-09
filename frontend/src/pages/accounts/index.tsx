@@ -19,6 +19,7 @@ import {
   Spin,
   Empty,
   ColorPicker,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -34,6 +35,7 @@ import { accountsApi, Account, AccountType, CreateAccountData } from '@/shared/a
 import { SEO } from '@/shared/ui';
 
 const { Title } = Typography;
+const { useBreakpoint } = Grid;
 
 const ACCOUNT_ICONS = ['💳', '💵', '🏦', '💰', '📈', '🪙', '💎', '🏠', '🚗', '✈️', '🎓', '🏥'];
 
@@ -63,6 +65,8 @@ const accountTypeColors: Record<AccountType, string> = {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [form] = Form.useForm();
@@ -156,10 +160,10 @@ export default function AccountsPage() {
         noIndex
       />
       <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={2} style={{ margin: 0 }}>Счета</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>Счета</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
-          Добавить счёт
+          {isMobile ? '' : 'Добавить счёт'}
         </Button>
       </div>
 
@@ -248,6 +252,7 @@ export default function AccountsPage() {
         open={isModalOpen}
         onCancel={handleCloseModal}
         footer={null}
+        width={isMobile ? '95%' : 500}
       >
         <Form
           form={form}

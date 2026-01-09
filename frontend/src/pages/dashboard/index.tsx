@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card, Col, Row, Statistic, Typography, List, Tag, Spin, Empty } from 'antd';
+import { Card, Col, Row, Statistic, Typography, List, Tag, Spin, Empty, Grid } from 'antd';
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
@@ -25,6 +25,7 @@ import { analyticsApi, Transaction, recurringApi, RecurringPayment } from '@/sha
 import { SEO } from '@/shared/ui';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 const COLORS = [
   '#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1',
@@ -56,6 +57,9 @@ const frequencyLabels: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+
   // Даты текущего месяца
   const dateFrom = dayjs().startOf('month').toISOString();
   const dateTo = dayjs().endOf('month').toISOString();
@@ -118,7 +122,7 @@ export default function DashboardPage() {
         description="Обзор ваших финансов: баланс, доходы, расходы и аналитика"
         noIndex
       />
-      <Title level={2}>Дашборд</Title>
+      <Title level={isMobile ? 3 : 2}>Дашборд</Title>
 
       {/* Статистика */}
       <Row gutter={[16, 16]}>

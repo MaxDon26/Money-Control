@@ -21,6 +21,7 @@ import {
   Segmented,
   Tabs,
   Alert,
+  Grid,
 } from 'antd';
 import {
   PlusOutlined,
@@ -50,11 +51,14 @@ import { SEO } from '@/shared/ui';
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
+const { useBreakpoint } = Grid;
 
 type OperationType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
 
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [operationType, setOperationType] = useState<OperationType>('EXPENSE');
@@ -434,10 +438,10 @@ export default function TransactionsPage() {
         noIndex
       />
       <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={2} style={{ margin: 0 }}>Транзакции</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap', gap: 8 }}>
+        <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>Транзакции</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
-          Добавить
+          {isMobile ? '' : 'Добавить'}
         </Button>
       </div>
 
@@ -566,12 +570,14 @@ export default function TransactionsPage() {
                 dataSource={transactionsData?.data || []}
                 rowKey="id"
                 loading={isLoading}
+                scroll={{ x: 800 }}
+                size={isMobile ? 'small' : 'middle'}
                 pagination={{
                   current: filters.page,
                   pageSize: filters.limit,
                   total: transactionsData?.meta.total || 0,
-                  showSizeChanger: true,
-                  showTotal: (total) => `Всего: ${total}`,
+                  showSizeChanger: !isMobile,
+                  showTotal: isMobile ? undefined : (total) => `Всего: ${total}`,
                   onChange: (page, pageSize) => {
                     setFilters((prev) => ({ ...prev, page, limit: pageSize }));
                   },
@@ -587,10 +593,12 @@ export default function TransactionsPage() {
                 columns={transferColumns}
                 dataSource={transfers}
                 rowKey="id"
+                scroll={{ x: 700 }}
+                size={isMobile ? 'small' : 'middle'}
                 pagination={{
                   pageSize: 20,
-                  showSizeChanger: true,
-                  showTotal: (total) => `Всего: ${total}`,
+                  showSizeChanger: !isMobile,
+                  showTotal: isMobile ? undefined : (total) => `Всего: ${total}`,
                 }}
               />
             ),
@@ -604,7 +612,7 @@ export default function TransactionsPage() {
         open={isModalOpen}
         onCancel={handleCloseModal}
         footer={null}
-        width={500}
+        width={isMobile ? '95%' : 500}
       >
         {!editingTransaction && (
           <Segmented

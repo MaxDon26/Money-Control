@@ -13,6 +13,7 @@ import {
   Tag,
   Spin,
   Empty,
+  Grid,
 } from 'antd';
 import {
   ArrowUpOutlined,
@@ -44,6 +45,7 @@ dayjs.extend(quarterOfYear);
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
+const { useBreakpoint } = Grid;
 
 const COLORS = [
   '#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1',
@@ -54,6 +56,8 @@ type ChartType = 'bar' | 'line';
 type ViewPeriod = 'month' | 'quarter' | 'year' | 'custom';
 
 export default function AnalyticsPage() {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [period, setPeriod] = useState<ViewPeriod>('month');
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [customDates, setCustomDates] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
@@ -181,8 +185,8 @@ export default function AnalyticsPage() {
         noIndex
       />
       <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
-        <Title level={2} style={{ margin: 0 }}>Аналитика</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap', gap: isMobile ? 8 : 16 }}>
+        <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>Аналитика</Title>
         <Space wrap>
           <Segmented
             value={period}
@@ -359,13 +363,14 @@ export default function AnalyticsPage() {
       </Row>
 
       {/* Топ категорий расходов */}
-      <Card title={<><TrophyOutlined /> Топ категорий расходов</>}>
+      <Card title={<><TrophyOutlined /> Топ категорий расходов</>} size={isMobile ? 'small' : 'default'}>
         <Table
           columns={topCategoriesColumns}
           dataSource={topCategories || []}
           rowKey={(record) => record.category?.id || Math.random().toString()}
           pagination={false}
           size="small"
+          scroll={{ x: 500 }}
         />
       </Card>
     </div>
