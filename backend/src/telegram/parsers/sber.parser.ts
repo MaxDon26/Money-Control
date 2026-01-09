@@ -105,7 +105,7 @@ export class SberParser {
 
     // Determine type and amount
     let amount: number | null = null;
-    let type: 'INCOME' | 'EXPENSE';
+    let type: 'INCOME' | 'EXPENSE' = 'EXPENSE'; // Default to expense
 
     if (incomeStr && this.parseAmount(incomeStr)) {
       amount = this.parseAmount(incomeStr);
@@ -166,7 +166,7 @@ export class SberParser {
       amount: Math.abs(amount),
       type,
       description: description.substring(0, 500),
-      category,
+      category: category || undefined,
     };
   }
 

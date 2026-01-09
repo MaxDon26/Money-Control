@@ -1,10 +1,6 @@
 import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-const pdfParse = require('pdf-parse');
-
-interface PdfData {
-  text: string;
-}
+const { PDFParse } = require('pdf-parse');
 
 interface ParsedTransaction {
   date: Date;
@@ -34,9 +30,14 @@ export class TinkoffPdfParser {
     const transactions: ParsedTransaction[] = [];
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      const data = (await pdfParse(pdfBuffer)) as PdfData;
-      const text: string = data.text;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+      const parser = new PDFParse({ data: pdfBuffer });
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const result = await parser.getText();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      await parser.destroy();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const text: string = result.text as string;
 
       // Split text into lines
       const lines = text

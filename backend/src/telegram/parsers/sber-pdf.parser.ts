@@ -1,10 +1,6 @@
 import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-const pdfParse = require('pdf-parse');
-
-interface PdfData {
-  text: string;
-}
+const { PDFParse } = require('pdf-parse');
 
 interface ParsedTransaction {
   date: Date;
@@ -13,6 +9,29 @@ interface ParsedTransaction {
   description: string;
   category?: string;
 }
+
+// Sberbank categories that appear in statements
+const SBER_CATEGORIES = [
+  'Прочие расходы',
+  'Супермаркеты',
+  'Рестораны и кафе',
+  'Перевод СБП',
+  'Перевод с карты',
+  'Перевод на карту',
+  'Выдача наличных',
+  'Оплата по QR–коду СБП',
+  'Оплата по QR-коду СБП',
+  'Прочие операции',
+  'Автомобиль',
+  'Одежда и аксессуары',
+  'Отдых и развлечения',
+  'Здоровье и красота',
+  'Все для дома',
+  'Связь и телеком',
+  'Транспорт',
+  'ЖКХ',
+  'Образование',
+];
 
 @Injectable()
 export class SberPdfParser {
@@ -35,9 +54,14 @@ export class SberPdfParser {
     const transactions: ParsedTransaction[] = [];
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      const data = (await pdfParse(pdfBuffer)) as PdfData;
-      const text: string = data.text;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+      const parser = new PDFParse({ data: pdfBuffer });
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const result = await parser.getText();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      await parser.destroy();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const text: string = result.text as string;
 
       // Split text into lines
       const lines = text
@@ -45,71 +69,43 @@ export class SberPdfParser {
         .map((l) => l.trim())
         .filter((l) => l);
 
-      // Sberbank statement patterns
-      // Format 1: DD.MM.YYYY Description Amount
-      // Format 2: Separate columns for income/expense
+      // Sberbank PDF format (2 lines per transaction):
+      // Line 1: DD.MM.YYYY HH:MM AUTHCODE CATEGORY AMOUNT BALANCE
+      // Line 2: DD.MM.YYYY DESCRIPTION. Операция по карте ****XXXX
+      //
+      // Example:
+      // 09.01.2026 01:52 294976 Прочие расходы 400,00 13,72
+      // 09.01.2026 TIMEWEB.CLOUD SANKT-PETERBU RUS. Операция по карте ****8227
+      //
+      // Income example (amount has + prefix):
+      // 06.01.2026 06:50 595125 Перевод СБП +8 000,00 8 000,00
+      // 06.01.2026 Перевод от Д. Максим Дмитриевич. Операция по карте ****8227
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line1 = lines[i];
+        const line2 = lines[i + 1];
 
-        // Try to match standard Sber format
-        // Pattern: DD.MM.YYYY HH:MM description amount
-        const match = line.match(
-          /(\d{2}\.\d{2}\.\d{4})(?:\s+\d{2}:\d{2})?\s+(.+?)\s+([+-]?\s*[\d\s]+[,.]\d{2})\s*(?:₽|руб|RUB)?$/i,
-        );
+        // Try to parse as transaction header (line 1)
+        const txData = this.parseTransactionLine(line1);
+        if (!txData) continue;
 
-        if (match) {
-          const date = this.parseDate(match[1]);
-          const description = match[2].trim();
-          const amount = this.parseAmount(match[3]);
-
-          if (date && amount !== null && amount !== 0) {
-            transactions.push({
-              date,
-              amount: Math.abs(amount),
-              type: amount > 0 ? 'INCOME' : 'EXPENSE',
-              description: description.substring(0, 500),
-            });
-          }
-          continue;
-        }
-
-        // Alternative: look for date and then find amount on same or next line
-        const dateMatch = line.match(/^(\d{2}\.\d{2}\.\d{4})/);
-        if (dateMatch) {
-          const date = this.parseDate(dateMatch[1]);
-          if (!date) continue;
-
-          // Try to extract description and amount from remaining line
-          let remaining = line.substring(dateMatch[0].length).trim();
-
-          // Remove time if present
-          remaining = remaining.replace(/^\d{2}:\d{2}\s*/, '');
-
-          // Look for amount pattern
-          const amountMatch = remaining.match(
-            /([+-]?\s*[\d\s]+[,.]\d{2})\s*(?:₽|руб|RUB)?$/i,
-          );
-
-          if (amountMatch) {
-            const amount = this.parseAmount(amountMatch[1]);
-            const description = remaining.replace(amountMatch[0], '').trim();
-
-            if (amount !== null && amount !== 0 && description) {
-              transactions.push({
-                date,
-                amount: Math.abs(amount),
-                type: amount > 0 ? 'INCOME' : 'EXPENSE',
-                description: description.substring(0, 500),
-              });
-            }
-          }
+        // Check if next line is the description line
+        const descData = this.parseDescriptionLine(line2);
+        if (descData) {
+          transactions.push({
+            date: txData.date,
+            amount: Math.abs(txData.amount),
+            type: txData.isIncome ? 'INCOME' : 'EXPENSE',
+            description: descData.description.substring(0, 500),
+            category: txData.category,
+          });
+          i++; // Skip the description line
         }
       }
 
-      // Try alternative parsing if no transactions found
+      // If no transactions found, try alternative parsing
       if (transactions.length === 0) {
-        const altTransactions = this.parseTableFormat(text);
+        const altTransactions = this.parseAlternativeFormat(lines);
         transactions.push(...altTransactions);
       }
     } catch {
@@ -119,44 +115,118 @@ export class SberPdfParser {
     return transactions;
   }
 
-  private parseTableFormat(text: string): ParsedTransaction[] {
+  private parseTransactionLine(line: string): {
+    date: Date;
+    amount: number;
+    isIncome: boolean;
+    category: string;
+  } | null {
+    // Pattern: DD.MM.YYYY HH:MM AUTHCODE CATEGORY AMOUNT BALANCE
+    // Date and time
+    const dateTimeMatch = line.match(/^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/);
+    if (!dateTimeMatch) return null;
+
+    const date = this.parseDate(dateTimeMatch[1]);
+    if (!date) return null;
+
+    // Auth code (6 digits after time)
+    const authCodeMatch = line.match(/\d{2}:\d{2}\s+(\d{6})/);
+    if (!authCodeMatch) return null;
+
+    // Find category
+    let category = '';
+    let categoryEndIndex = -1;
+    for (const cat of SBER_CATEGORIES) {
+      const catIndex = line.indexOf(cat);
+      if (catIndex > -1) {
+        category = cat;
+        categoryEndIndex = catIndex + cat.length;
+        break;
+      }
+    }
+
+    if (!category) return null;
+
+    // Extract amount and balance after category
+    const afterCategory = line.substring(categoryEndIndex).trim();
+    // Pattern: AMOUNT BALANCE where amount may have + prefix
+    // Example: "400,00 13,72" or "+8 000,00 8 000,00"
+    const amountMatch = afterCategory.match(
+      /^([+-]?[\d\s]+[,.]?\d*)\s+([\d\s]+[,.]\d{2})$/,
+    );
+
+    if (!amountMatch) return null;
+
+    const amountStr = amountMatch[1];
+    const amount = this.parseAmount(amountStr);
+    if (amount === null) return null;
+
+    const isIncome = amountStr.includes('+');
+
+    return { date, amount, isIncome, category };
+  }
+
+  private parseDescriptionLine(line: string): { description: string } | null {
+    // Description line starts with date and contains "Операция по карте"
+    const dateMatch = line.match(/^(\d{2}\.\d{2}\.\d{4})\s+(.+)/);
+    if (!dateMatch) return null;
+
+    let description = dateMatch[2].trim();
+
+    // Remove "Операция по карте ****XXXX" suffix
+    description = description.replace(
+      /\.\s*Операция\s+по\s+карте\s+\*+\d+$/,
+      '',
+    );
+    description = description.replace(/Операция\s+по\s+карте\s+\*+\d+$/, '');
+
+    // Clean up description
+    description = description.trim();
+    if (description.endsWith('.')) {
+      description = description.slice(0, -1);
+    }
+
+    if (!description) return null;
+
+    return { description };
+  }
+
+  private parseAlternativeFormat(lines: string[]): ParsedTransaction[] {
     const transactions: ParsedTransaction[] = [];
 
-    // Split into lines
-    const lines = text.split('\n');
-
-    // Look for table-like structure with separate debit/credit columns
-    // Pattern: Date | Description | Debit | Credit | Balance
-
+    // Try simpler pattern matching for different formats
     for (const line of lines) {
-      // Try various Sber table formats
-      // Format: DD.MM.YYYY Description Debit Credit
-      const tableMatch = line.match(
-        /(\d{2}\.\d{2}\.\d{4})\s+(.+?)\s+([\d\s]+[,.]\d{2})?\s*([\d\s]+[,.]\d{2})?$/,
+      // Try to match: DD.MM.YYYY ... AMOUNT BALANCE
+      const match = line.match(
+        /(\d{2}\.\d{2}\.\d{4})(?:\s+\d{2}:\d{2})?\s+\d{6}\s+(.+?)\s+([+-]?[\d\s]+[,.]\d{2})\s+[\d\s]+[,.]\d{2}$/,
       );
 
-      if (tableMatch) {
-        const date = this.parseDate(tableMatch[1]);
-        const description = tableMatch[2]?.trim();
-        const debit = tableMatch[3] ? this.parseAmount(tableMatch[3]) : null;
-        const credit = tableMatch[4] ? this.parseAmount(tableMatch[4]) : null;
+      if (match) {
+        const date = this.parseDate(match[1]);
+        const middlePart = match[2].trim();
+        const amountStr = match[3];
+        const amount = this.parseAmount(amountStr);
 
-        if (date && description) {
-          if (debit && debit > 0) {
-            transactions.push({
-              date,
-              amount: debit,
-              type: 'EXPENSE',
-              description: description.substring(0, 500),
-            });
-          } else if (credit && credit > 0) {
-            transactions.push({
-              date,
-              amount: credit,
-              type: 'INCOME',
-              description: description.substring(0, 500),
-            });
+        if (date && amount !== null && amount !== 0) {
+          // Try to extract category from middle part
+          let category = '';
+          let description = middlePart;
+
+          for (const cat of SBER_CATEGORIES) {
+            if (middlePart.includes(cat)) {
+              category = cat;
+              description = middlePart.replace(cat, '').trim();
+              break;
+            }
           }
+
+          transactions.push({
+            date,
+            amount: Math.abs(amount),
+            type: amountStr.includes('+') ? 'INCOME' : 'EXPENSE',
+            description: description.substring(0, 500),
+            category: category || undefined,
+          });
         }
       }
     }
@@ -173,33 +243,26 @@ export class SberPdfParser {
       return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     }
 
-    // Try short year format DD.MM.YY
-    const shortMatch = dateStr.match(/(\d{2})\.(\d{2})\.(\d{2})/);
-    if (shortMatch) {
-      const [, day, month, year] = shortMatch;
-      const fullYear = parseInt(year) + 2000;
-      return new Date(fullYear, parseInt(month) - 1, parseInt(day));
-    }
-
     return null;
   }
 
   private parseAmount(amountStr: string): number | null {
     if (!amountStr) return null;
 
-    // Clean up
-    let cleaned = amountStr
-      .replace(/\s/g, '')
-      .replace(',', '.')
-      .replace(/[₽руб.RUB]/gi, '');
+    // Clean up: remove spaces, replace comma with dot
+    let cleaned = amountStr.replace(/\s/g, '').replace(',', '.');
 
-    // Handle signs
+    // Handle + and - signs
     const isNegative = cleaned.includes('-');
+    const isPositive = cleaned.includes('+');
     cleaned = cleaned.replace(/[+-]/g, '');
 
     const amount = parseFloat(cleaned);
     if (isNaN(amount)) return null;
 
-    return isNegative ? -amount : amount;
+    // Return positive for income (+), negative for expense (default)
+    if (isPositive) return amount;
+    if (isNegative) return -amount;
+    return -amount; // Default to expense
   }
 }

@@ -9,11 +9,7 @@ import { TinkoffPdfParser } from './parsers/tinkoff-pdf.parser';
 import { SberPdfParser } from './parsers/sber-pdf.parser';
 import { randomBytes } from 'crypto';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-const pdfParse = require('pdf-parse');
-
-interface PdfData {
-  text: string;
-}
+const { PDFParse } = require('pdf-parse');
 
 interface ParsedTransaction {
   date: Date;
@@ -98,6 +94,7 @@ export class TelegramService implements OnModuleInit {
 
     // Handle any other message
     this.bot.on('message', async (ctx) => {
+      if (!ctx.from) return;
       const link = await this.prisma.telegramLink.findUnique({
         where: { telegramId: BigInt(ctx.from.id) },
       });
@@ -122,6 +119,7 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async handleStart(ctx: Context) {
+    if (!ctx.from) return;
     const telegramId = BigInt(ctx.from.id);
     const link = await this.prisma.telegramLink.findUnique({
       where: { telegramId },
@@ -150,6 +148,7 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async handleLinkCode(ctx: Context, code: string) {
+    if (!ctx.from) return;
     const telegramId = BigInt(ctx.from.id);
 
     // Check if already linked
@@ -211,6 +210,7 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async handleStatus(ctx: Context) {
+    if (!ctx.from) return;
     const telegramId = BigInt(ctx.from.id);
     const link = await this.prisma.telegramLink.findUnique({
       where: { telegramId },
@@ -232,6 +232,7 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async handleUnlink(ctx: Context) {
+    if (!ctx.from) return;
     const telegramId = BigInt(ctx.from.id);
     const link = await this.prisma.telegramLink.findUnique({
       where: { telegramId },
@@ -267,6 +268,7 @@ export class TelegramService implements OnModuleInit {
   }
 
   private async handleDocument(ctx: Context) {
+    if (!ctx.from) return;
     const telegramId = BigInt(ctx.from.id);
 
     // Check if linked
@@ -334,9 +336,14 @@ export class TelegramService implements OnModuleInit {
       } else {
         // Handle PDF
         const pdfBuffer = Buffer.from(await response.arrayBuffer());
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-        const pdfData = (await pdfParse(pdfBuffer)) as PdfData;
-        const pdfText: string = pdfData.text;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+        const pdfParser = new PDFParse({ data: pdfBuffer });
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+        const pdfResult = await pdfParser.getText();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+        await pdfParser.destroy();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        const pdfText: string = pdfResult.text as string;
 
         if (this.tinkoffPdfParser.canParse(pdfText)) {
           transactions = await this.tinkoffPdfParser.parse(pdfBuffer);

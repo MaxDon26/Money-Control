@@ -120,7 +120,7 @@ export class TinkoffParser {
       amount,
       type: amount > 0 ? 'INCOME' : 'EXPENSE',
       description: description.substring(0, 500),
-      category,
+      category: category || undefined,
     };
   }
 
