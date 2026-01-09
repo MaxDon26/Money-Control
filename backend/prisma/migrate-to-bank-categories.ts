@@ -4,26 +4,26 @@ const prisma = new PrismaClient();
 
 // Категории расходов из банковских выписок (Сбербанк)
 const EXPENSE_CATEGORIES = [
-  'Супермаркеты',
-  'Рестораны и кафе',
-  'Транспорт',
-  'Автомобиль',
-  'Связь и телеком',
-  'Здоровье и красота',
-  'Одежда и аксессуары',
-  'Отдых и развлечения',
-  'Все для дома',
-  'ЖКХ',
-  'Образование',
-  'Выдача наличных',
-  'Прочие расходы',
+  { name: 'Супермаркеты', icon: '🛒' },
+  { name: 'Рестораны и кафе', icon: '🍽️' },
+  { name: 'Транспорт', icon: '🚌' },
+  { name: 'Автомобиль', icon: '🚗' },
+  { name: 'Связь и телеком', icon: '📱' },
+  { name: 'Здоровье и красота', icon: '💊' },
+  { name: 'Одежда и аксессуары', icon: '👕' },
+  { name: 'Отдых и развлечения', icon: '🎮' },
+  { name: 'Все для дома', icon: '🏠' },
+  { name: 'ЖКХ', icon: '💡' },
+  { name: 'Образование', icon: '📚' },
+  { name: 'Выдача наличных', icon: '💵' },
+  { name: 'Прочие расходы', icon: '📦' },
 ];
 
 // Категории доходов / переводов
 const INCOME_CATEGORIES = [
-  'Перевод СБП',
-  'Перевод на карту',
-  'Другое',
+  { name: 'Перевод СБП', icon: '💸' },
+  { name: 'Перевод на карту', icon: '💳' },
+  { name: 'Другое', icon: '📥' },
 ];
 
 async function main() {
@@ -49,7 +49,7 @@ async function main() {
     const categoryMapping = new Map<string, string>(); // oldId -> newId
 
     // Создаём категории расходов
-    for (const name of EXPENSE_CATEGORIES) {
+    for (const { name, icon } of EXPENSE_CATEGORIES) {
       // Проверяем, нет ли уже такой категории у пользователя
       let category = await prisma.category.findFirst({
         where: { userId: user.id, name, type: 'EXPENSE' },
@@ -60,6 +60,7 @@ async function main() {
           data: {
             userId: user.id,
             name,
+            icon,
             type: 'EXPENSE',
             isSystem: false,
           },
@@ -76,7 +77,7 @@ async function main() {
     }
 
     // Создаём категории доходов
-    for (const name of INCOME_CATEGORIES) {
+    for (const { name, icon } of INCOME_CATEGORIES) {
       let category = await prisma.category.findFirst({
         where: { userId: user.id, name, type: 'INCOME' },
       });
@@ -86,6 +87,7 @@ async function main() {
           data: {
             userId: user.id,
             name,
+            icon,
             type: 'INCOME',
             isSystem: false,
           },
@@ -109,6 +111,7 @@ async function main() {
         data: {
           userId: user.id,
           name: 'Прочие расходы',
+          icon: '📦',
           type: 'EXPENSE',
           isSystem: false,
         },
@@ -123,6 +126,7 @@ async function main() {
         data: {
           userId: user.id,
           name: 'Другое',
+          icon: '📥',
           type: 'INCOME',
           isSystem: false,
         },
