@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Telegraf, Context } from 'telegraf';
 import { message } from 'telegraf/filters';
+import { Markup } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { TinkoffParser } from './parsers/tinkoff.parser';
 import { SberParser } from './parsers/sber.parser';
@@ -19,10 +20,19 @@ interface ParsedTransaction {
   category?: string;
 }
 
+interface PendingImport {
+  userId: string;
+  transactions: ParsedTransaction[];
+  bankName: string;
+  createdAt: Date;
+}
+
 @Injectable()
 export class TelegramService implements OnModuleInit {
   private bot: Telegraf;
   private readonly logger = new Logger(TelegramService.name);
+  // Store pending imports by telegramId (expires after 10 minutes)
+  private pendingImports = new Map<string, PendingImport>();
 
   constructor(
     private configService: ConfigService,
@@ -90,6 +100,11 @@ export class TelegramService implements OnModuleInit {
     // Handle document (CSV file)
     this.bot.on(message('document'), async (ctx) => {
       await this.handleDocument(ctx);
+    });
+
+    // Handle account selection callback
+    this.bot.action(/^import_account_(.+)$/, async (ctx) => {
+      await this.handleAccountSelection(ctx);
     });
 
     // Handle any other message
@@ -367,13 +382,13 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
-      // Get user's default account or first account
-      const account = await this.prisma.account.findFirst({
+      // Get all user's accounts
+      const accounts = await this.prisma.account.findMany({
         where: { userId: link.userId, isArchived: false },
         orderBy: { createdAt: 'asc' },
       });
 
-      if (!account) {
+      if (accounts.length === 0) {
         await ctx.reply(
           '❌ У вас нет счетов в Money Control.\n' +
             'Создайте хотя бы один счёт в приложении.',
@@ -381,11 +396,148 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      // Try to auto-match bank to account by name
+      const bankKeywords =
+        bankName === 'Сбербанк'
+          ? ['сбер', 'sber', 'сбербанк']
+          : ['тинькофф', 'tinkoff', 'т-банк', 't-bank'];
+
+      const matchedAccount = accounts.find((acc) => {
+        const lowerName = acc.name.toLowerCase();
+        return bankKeywords.some((kw) => lowerName.includes(kw));
+      });
+
+      // If only one account or auto-matched, proceed directly
+      if (accounts.length === 1 || matchedAccount) {
+        const selectedAccount = matchedAccount || accounts[0];
+        await this.importTransactions(
+          ctx,
+          link.userId,
+          selectedAccount.id,
+          transactions,
+          bankName,
+        );
+        return;
+      }
+
+      // Multiple accounts and no auto-match - show selection
+      // Store pending import
+      const telegramIdStr = ctx.from.id.toString();
+      this.pendingImports.set(telegramIdStr, {
+        userId: link.userId,
+        transactions,
+        bankName,
+        createdAt: new Date(),
+      });
+
+      // Create account selection buttons
+      const buttons = accounts.map((acc) =>
+        Markup.button.callback(`${acc.name}`, `import_account_${acc.id}`),
+      );
+
+      // Arrange in rows of 2
+      const keyboard: ReturnType<typeof Markup.button.callback>[][] = [];
+      for (let i = 0; i < buttons.length; i += 2) {
+        keyboard.push(buttons.slice(i, i + 2));
+      }
+
+      await ctx.reply(
+        `📊 Найдено ${transactions.length} транзакций из ${bankName}.\n\n` +
+          '💳 Выберите счёт для импорта:',
+        Markup.inlineKeyboard(keyboard),
+      );
+    } catch (error) {
+      this.logger.error('Error processing file', error);
+      await ctx.reply(
+        '❌ Ошибка при обработке файла.\n' +
+          'Убедитесь, что это корректный файл выписки (PDF или CSV).',
+      );
+    }
+  }
+
+  private async handleAccountSelection(ctx: Context) {
+    if (!ctx.from) return;
+    const telegramIdStr = ctx.from.id.toString();
+
+    // Get pending import
+    const pending = this.pendingImports.get(telegramIdStr);
+    if (!pending) {
+      await ctx.answerCbQuery(
+        '⚠️ Данные импорта устарели. Отправьте файл заново.',
+      );
+      return;
+    }
+
+    // Check if expired (10 minutes)
+    if (Date.now() - pending.createdAt.getTime() > 10 * 60 * 1000) {
+      this.pendingImports.delete(telegramIdStr);
+      await ctx.answerCbQuery(
+        '⚠️ Данные импорта устарели. Отправьте файл заново.',
+      );
+      return;
+    }
+
+    // Get selected account ID from callback data
+    const callbackQuery = ctx.callbackQuery as { data?: string };
+    const match = callbackQuery.data?.match(/^import_account_(.+)$/);
+    if (!match) {
+      await ctx.answerCbQuery('❌ Ошибка выбора счёта.');
+      return;
+    }
+
+    const accountId = match[1];
+
+    // Verify account belongs to user
+    const account = await this.prisma.account.findFirst({
+      where: { id: accountId, userId: pending.userId },
+    });
+
+    if (!account) {
+      await ctx.answerCbQuery('❌ Счёт не найден.');
+      return;
+    }
+
+    // Clear pending import
+    this.pendingImports.delete(telegramIdStr);
+
+    // Answer callback to remove loading state
+    await ctx.answerCbQuery();
+
+    // Update message to show processing
+    await ctx.editMessageText(`⏳ Импортирую в "${account.name}"...`);
+
+    // Perform import
+    await this.importTransactions(
+      ctx,
+      pending.userId,
+      accountId,
+      pending.transactions,
+      pending.bankName,
+    );
+  }
+
+  private async importTransactions(
+    ctx: Context,
+    userId: string,
+    accountId: string,
+    transactions: ParsedTransaction[],
+    bankName: string,
+  ) {
+    try {
+      const account = await this.prisma.account.findUnique({
+        where: { id: accountId },
+      });
+
+      if (!account) {
+        await ctx.reply('❌ Счёт не найден.');
+        return;
+      }
+
       // Get default category for expenses and income
       const expenseCategory = await this.prisma.category.findFirst({
         where: {
           OR: [
-            { userId: link.userId, type: 'EXPENSE' },
+            { userId, type: 'EXPENSE' },
             { isSystem: true, type: 'EXPENSE' },
           ],
         },
@@ -394,7 +546,7 @@ export class TelegramService implements OnModuleInit {
       const incomeCategory = await this.prisma.category.findFirst({
         where: {
           OR: [
-            { userId: link.userId, type: 'INCOME' },
+            { userId, type: 'INCOME' },
             { isSystem: true, type: 'INCOME' },
           ],
         },
@@ -413,7 +565,7 @@ export class TelegramService implements OnModuleInit {
         // Check for duplicates (same date, amount, description)
         const existing = await this.prisma.transaction.findFirst({
           where: {
-            userId: link.userId,
+            userId,
             date: tx.date,
             amount: Math.abs(tx.amount),
             description: tx.description,
@@ -427,7 +579,7 @@ export class TelegramService implements OnModuleInit {
 
         await this.prisma.transaction.create({
           data: {
-            userId: link.userId,
+            userId,
             accountId: account.id,
             categoryId:
               tx.type === 'EXPENSE' ? expenseCategory.id : incomeCategory.id,
