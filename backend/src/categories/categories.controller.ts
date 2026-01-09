@@ -65,10 +65,4 @@ export class CategoriesController {
   remove(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.categoriesService.remove(userId, id);
   }
-
-  @Post('seed')
-  @ApiOperation({ summary: 'Создать системные категории (admin)' })
-  seed() {
-    return this.categoriesService.seedSystemCategories();
-  }
 }

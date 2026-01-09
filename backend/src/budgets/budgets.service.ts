@@ -47,7 +47,7 @@ export class BudgetsService {
       where: {
         id: dto.categoryId,
         type: 'EXPENSE', // Бюджеты только для расходов
-        OR: [{ userId }, { isSystem: true }],
+        userId,
       },
     });
 

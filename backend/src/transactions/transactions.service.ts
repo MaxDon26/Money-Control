@@ -36,11 +36,11 @@ export class TransactionsService {
       }
     }
 
-    // Проверяем категорию (системная или пользовательская)
+    // Проверяем категорию
     const category = await this.prisma.category.findFirst({
       where: {
         id: dto.categoryId,
-        OR: [{ userId }, { isSystem: true }],
+        userId,
       },
     });
 
@@ -187,7 +187,7 @@ export class TransactionsService {
       const category = await this.prisma.category.findFirst({
         where: {
           id: dto.categoryId,
-          OR: [{ userId }, { isSystem: true }],
+          userId,
         },
       });
       if (!category) {

@@ -533,33 +533,13 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
-      // Get default category for expenses and income
-      const expenseCategory = await this.prisma.category.findFirst({
-        where: {
-          OR: [
-            { userId, type: 'EXPENSE' },
-            { isSystem: true, type: 'EXPENSE' },
-          ],
-        },
-      });
-
-      const incomeCategory = await this.prisma.category.findFirst({
-        where: {
-          OR: [
-            { userId, type: 'INCOME' },
-            { isSystem: true, type: 'INCOME' },
-          ],
-        },
-      });
-
-      if (!expenseCategory || !incomeCategory) {
-        await ctx.reply('❌ Не найдены категории. Обратитесь в поддержку.');
-        return;
-      }
+      // Cache for categories to avoid repeated DB queries
+      const categoryCache = new Map<string, string>(); // "type:name" -> categoryId
 
       // Import transactions
       let imported = 0;
       let skipped = 0;
+      let categoriesCreated = 0;
 
       for (const tx of transactions) {
         // Check for duplicates (same date, amount, description)
@@ -577,12 +557,43 @@ export class TelegramService implements OnModuleInit {
           continue;
         }
 
+        // Get or create category from bank data
+        const categoryName = tx.category || 'Другое';
+        const cacheKey = `${tx.type}:${categoryName}`;
+        let categoryId = categoryCache.get(cacheKey);
+
+        if (!categoryId) {
+          // Try to find existing category for this user
+          let category = await this.prisma.category.findFirst({
+            where: {
+              userId,
+              name: categoryName,
+              type: tx.type,
+            },
+          });
+
+          // If not found, create new user category
+          if (!category) {
+            category = await this.prisma.category.create({
+              data: {
+                userId,
+                name: categoryName,
+                type: tx.type,
+                isSystem: false,
+              },
+            });
+            categoriesCreated++;
+          }
+
+          categoryId = category.id;
+          categoryCache.set(cacheKey, categoryId);
+        }
+
         await this.prisma.transaction.create({
           data: {
             userId,
             accountId: account.id,
-            categoryId:
-              tx.type === 'EXPENSE' ? expenseCategory.id : incomeCategory.id,
+            categoryId,
             type: tx.type,
             amount: Math.abs(tx.amount),
             description: tx.description,
@@ -601,20 +612,25 @@ export class TelegramService implements OnModuleInit {
         imported++;
       }
 
-      const message =
+      let message =
         `✅ Импорт из ${bankName} завершён!\n\n` +
         `📊 Результат:\n` +
         `• Импортировано: ${imported}\n` +
         `• Пропущено (дубли): ${skipped}\n` +
-        `• Счёт: ${account.name}\n\n` +
-        `💡 Откройте Money Control для просмотра и редактирования категорий.`;
+        `• Счёт: ${account.name}`;
+
+      if (categoriesCreated > 0) {
+        message += `\n• Создано категорий: ${categoriesCreated}`;
+      }
+
+      message += `\n\n💡 Категории созданы из выписки банка. Вы можете редактировать их в приложении.`;
 
       await ctx.reply(message);
     } catch (error) {
-      this.logger.error('Error processing file', error);
+      this.logger.error('Error importing transactions', error);
       await ctx.reply(
-        '❌ Ошибка при обработке файла.\n' +
-          'Убедитесь, что это корректный файл выписки (PDF или CSV).',
+        '❌ Ошибка при импорте транзакций.\n' +
+          'Попробуйте ещё раз или обратитесь в поддержку.',
       );
     }
   }

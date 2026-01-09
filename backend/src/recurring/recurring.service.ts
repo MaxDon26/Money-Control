@@ -115,7 +115,7 @@ export class RecurringService {
     const category = await this.prisma.category.findFirst({
       where: {
         id: dto.categoryId,
-        OR: [{ userId }, { isSystem: true }],
+        userId,
       },
     });
     if (!category) {
@@ -204,7 +204,7 @@ export class RecurringService {
       const category = await this.prisma.category.findFirst({
         where: {
           id: dto.categoryId,
-          OR: [{ userId }, { isSystem: true }],
+          userId,
         },
       });
       if (!category) {
