@@ -5,7 +5,15 @@ import { message } from 'telegraf/filters';
 import { PrismaService } from '../prisma/prisma.service';
 import { TinkoffParser } from './parsers/tinkoff.parser';
 import { SberParser } from './parsers/sber.parser';
+import { TinkoffPdfParser } from './parsers/tinkoff-pdf.parser';
+import { SberPdfParser } from './parsers/sber-pdf.parser';
 import { randomBytes } from 'crypto';
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
+const pdfParse = require('pdf-parse');
+
+interface PdfData {
+  text: string;
+}
 
 interface ParsedTransaction {
   date: Date;
@@ -25,6 +33,8 @@ export class TelegramService implements OnModuleInit {
     private prisma: PrismaService,
     private tinkoffParser: TinkoffParser,
     private sberParser: SberParser,
+    private tinkoffPdfParser: TinkoffPdfParser,
+    private sberPdfParser: SberPdfParser,
   ) {
     const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
     if (token) {
@@ -102,10 +112,10 @@ export class TelegramService implements OnModuleInit {
         );
       } else {
         await ctx.reply(
-          '📎 Отправьте CSV-файл выписки из Тинькофф или Сбербанка.\n\n' +
+          '📎 Отправьте файл выписки (PDF или CSV) из Тинькофф или Сбербанка.\n\n' +
             'Как получить выписку:\n' +
-            '• Тинькофф: История → ⋯ → Выгрузить → CSV\n' +
-            '• Сбер: История → Выписка → Сохранить как CSV',
+            '• Тинькофф: История → Заказать справку → PDF\n' +
+            '• Сбер: История → Выписка → PDF',
         );
       }
     });
@@ -121,7 +131,7 @@ export class TelegramService implements OnModuleInit {
     if (link) {
       await ctx.reply(
         `✅ Вы уже привязаны к аккаунту ${link.user.email}\n\n` +
-          '📎 Отправьте CSV-файл выписки из Тинькофф или Сбербанка для импорта транзакций.\n\n' +
+          '📎 Отправьте файл выписки (PDF или CSV) из Тинькофф или Сбербанка для импорта транзакций.\n\n' +
           'Команды:\n' +
           '/status — проверить привязку\n' +
           '/unlink — отвязать аккаунт\n' +
@@ -193,7 +203,7 @@ export class TelegramService implements OnModuleInit {
     await ctx.reply(
       `✅ Аккаунт успешно привязан!\n\n` +
         `Email: ${linkCode.user.email}\n\n` +
-        '📎 Теперь вы можете отправлять мне CSV-файлы выписок из Тинькофф или Сбербанка.\n\n' +
+        '📎 Теперь вы можете отправлять мне файлы выписок (PDF или CSV) из Тинькофф или Сбербанка.\n\n' +
         'Как получить выписку:\n' +
         '• Тинькофф: История → ⋯ → Выгрузить → CSV\n' +
         '• Сбер: История → Выписка → Сохранить как CSV',
@@ -247,7 +257,7 @@ export class TelegramService implements OnModuleInit {
         '/unlink — отвязать аккаунт\n' +
         '/help — эта справка\n\n' +
         'Как импортировать транзакции:\n' +
-        '1. Скачайте CSV-выписку из приложения банка\n' +
+        '1. Скачайте выписку (PDF) из приложения банка\n' +
         '2. Отправьте файл мне\n' +
         '3. Готово!\n\n' +
         'Поддерживаемые банки:\n' +
@@ -282,9 +292,13 @@ export class TelegramService implements OnModuleInit {
       return;
     }
     const fileName = document.file_name?.toLowerCase() || '';
+    const isCsv = fileName.endsWith('.csv');
+    const isPdf = fileName.endsWith('.pdf');
 
-    if (!fileName.endsWith('.csv')) {
-      await ctx.reply('❌ Пожалуйста, отправьте CSV-файл выписки.');
+    if (!isCsv && !isPdf) {
+      await ctx.reply(
+        '❌ Пожалуйста, отправьте файл выписки в формате CSV или PDF.',
+      );
       return;
     }
 
@@ -294,26 +308,51 @@ export class TelegramService implements OnModuleInit {
       // Download file
       const fileLink = await ctx.telegram.getFileLink(document.file_id);
       const response = await fetch(fileLink.href);
-      const csvContent = await response.text();
 
-      // Detect bank and parse
       let transactions: ParsedTransaction[];
       let bankName: string;
 
-      if (this.tinkoffParser.canParse(csvContent)) {
-        transactions = this.tinkoffParser.parse(csvContent);
-        bankName = 'Тинькофф';
-      } else if (this.sberParser.canParse(csvContent)) {
-        transactions = this.sberParser.parse(csvContent);
-        bankName = 'Сбербанк';
+      if (isCsv) {
+        // Handle CSV
+        const csvContent = await response.text();
+
+        if (this.tinkoffParser.canParse(csvContent)) {
+          transactions = this.tinkoffParser.parse(csvContent);
+          bankName = 'Тинькофф';
+        } else if (this.sberParser.canParse(csvContent)) {
+          transactions = this.sberParser.parse(csvContent);
+          bankName = 'Сбербанк';
+        } else {
+          await ctx.reply(
+            '❌ Не удалось определить формат CSV файла.\n\n' +
+              'Поддерживаются выписки:\n' +
+              '• Тинькофф\n' +
+              '• Сбербанк',
+          );
+          return;
+        }
       } else {
-        await ctx.reply(
-          '❌ Не удалось определить формат файла.\n\n' +
-            'Поддерживаются выписки:\n' +
-            '• Тинькофф (CSV)\n' +
-            '• Сбербанк (CSV)',
-        );
-        return;
+        // Handle PDF
+        const pdfBuffer = Buffer.from(await response.arrayBuffer());
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        const pdfData = (await pdfParse(pdfBuffer)) as PdfData;
+        const pdfText: string = pdfData.text;
+
+        if (this.tinkoffPdfParser.canParse(pdfText)) {
+          transactions = await this.tinkoffPdfParser.parse(pdfBuffer);
+          bankName = 'Тинькофф';
+        } else if (this.sberPdfParser.canParse(pdfText)) {
+          transactions = await this.sberPdfParser.parse(pdfBuffer);
+          bankName = 'Сбербанк';
+        } else {
+          await ctx.reply(
+            '❌ Не удалось определить банк по PDF файлу.\n\n' +
+              'Поддерживаются выписки:\n' +
+              '• Тинькофф\n' +
+              '• Сбербанк',
+          );
+          return;
+        }
       }
 
       if (transactions.length === 0) {
@@ -413,10 +452,10 @@ export class TelegramService implements OnModuleInit {
 
       await ctx.reply(message);
     } catch (error) {
-      this.logger.error('Error processing CSV file', error);
+      this.logger.error('Error processing file', error);
       await ctx.reply(
         '❌ Ошибка при обработке файла.\n' +
-          'Убедитесь, что это корректный CSV-файл выписки.',
+          'Убедитесь, что это корректный файл выписки (PDF или CSV).',
       );
     }
   }
