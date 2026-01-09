@@ -54,7 +54,6 @@ jobs:
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
-            docs/package-lock.json
 
       # Backend
       - run: npm ci
@@ -64,13 +63,7 @@ jobs:
       - run: npm run build
         working-directory: backend
 
-      # Docs (build and copy to frontend)
-      - run: npm ci
-        working-directory: docs
-      - run: npm run build:frontend
-        working-directory: docs
-
-      # Frontend (includes docs)
+      # Frontend
       - run: npm ci
         working-directory: frontend
       - run: npm run build
