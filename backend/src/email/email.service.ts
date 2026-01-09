@@ -64,7 +64,7 @@ export class EmailService {
   }
 
   async sendEmailVerification(email: string, token: string): Promise<boolean> {
-    const verifyUrl = `${this.appUrl}/api/auth/verify-email/${token}`;
+    const verifyUrl = `${this.appUrl}/verify-email/${token}`;
 
     try {
       await this.resend.emails.send({
