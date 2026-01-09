@@ -13,13 +13,13 @@ export default function VerifyEmailPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (!finalToken) {
-      setStatus('error');
-      setMessage('Токен не найден');
-      return;
-    }
-
     const verify = async () => {
+      if (!finalToken) {
+        setStatus('error');
+        setMessage('Токен не найден');
+        return;
+      }
+
       try {
         await authApi.verifyEmail(finalToken);
         setStatus('success');
