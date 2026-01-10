@@ -32,6 +32,7 @@ import {
   ArrowDownOutlined,
   FilterOutlined,
   UploadOutlined,
+  ScanOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -50,6 +51,7 @@ import {
 } from '@/shared/api';
 import { SEO } from '@/shared/ui';
 import { ImportStatementModal } from '@/features/import';
+import { QrScannerModal, FiscalQrData } from '@/features/qr-scanner';
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
@@ -63,6 +65,7 @@ export default function TransactionsPage() {
   const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [operationType, setOperationType] = useState<OperationType>('EXPENSE');
   const [form] = Form.useForm();
@@ -227,6 +230,21 @@ export default function TransactionsPage() {
     setSelectedAccountId(null);
     setSelectedFromAccountId(null);
     form.resetFields();
+  };
+
+  const handleQrScan = (data: FiscalQrData) => {
+    // Открываем форму создания транзакции с данными из QR
+    setEditingTransaction(null);
+    setOperationType('EXPENSE');
+    setSelectedAccountId(null);
+    setSelectedFromAccountId(null);
+    form.resetFields();
+    form.setFieldsValue({
+      amount: data.amount,
+      date: dayjs(data.date),
+      tagIds: [],
+    });
+    setIsModalOpen(true);
   };
 
   const handleSubmit = async (values: Record<string, unknown>) => {
@@ -456,6 +474,9 @@ export default function TransactionsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap', gap: 8 }}>
         <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>Транзакции</Title>
         <Space>
+          <Button icon={<ScanOutlined />} onClick={() => setIsQrScannerOpen(true)}>
+            {isMobile ? '' : 'Чек'}
+          </Button>
           <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
             {isMobile ? '' : 'Импорт'}
           </Button>
@@ -847,6 +868,12 @@ export default function TransactionsPage() {
         open={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         accounts={accounts.filter((a) => !a.isArchived)}
+      />
+
+      <QrScannerModal
+        open={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        onScan={handleQrScan}
       />
     </div>
     </>
