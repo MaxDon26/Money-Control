@@ -10,6 +10,11 @@ import { TinkoffPdfParser } from './parsers/tinkoff-pdf.parser';
 import { SberPdfParser } from './parsers/sber-pdf.parser';
 import { CategoryMapper } from './parsers/category-mapper';
 import { AiCategorizerService } from './ai/ai-categorizer.service';
+import {
+  CategoryForAi,
+  DEFAULT_EXPENSE_CATEGORY,
+  DEFAULT_INCOME_CATEGORY,
+} from './ai/categorization-prompt';
 import { randomBytes } from 'crypto';
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
 const { PDFParse } = require('pdf-parse');
@@ -537,6 +542,49 @@ export class TelegramService implements OnModuleInit {
         return;
       }
 
+      // Step 0: Load user's categories from DB
+      const userCategories = await this.prisma.category.findMany({
+        where: { userId },
+        select: { id: true, name: true, type: true },
+      });
+
+      // Ensure default categories exist
+      await this.ensureDefaultCategories(userId);
+
+      // Build category map for quick lookup: "type:name" -> categoryId
+      const categoryCache = new Map<string, string>();
+      const categoriesForAi: CategoryForAi[] = [];
+
+      for (const cat of userCategories) {
+        const cacheKey = `${cat.type}:${cat.name}`;
+        categoryCache.set(cacheKey, cat.id);
+        categoriesForAi.push({
+          name: cat.name,
+          type: cat.type as 'INCOME' | 'EXPENSE',
+        });
+      }
+
+      // Also cache default categories after ensuring they exist
+      const defaultExpense = await this.prisma.category.findFirst({
+        where: { userId, name: DEFAULT_EXPENSE_CATEGORY, type: 'EXPENSE' },
+      });
+      const defaultIncome = await this.prisma.category.findFirst({
+        where: { userId, name: DEFAULT_INCOME_CATEGORY, type: 'INCOME' },
+      });
+
+      if (defaultExpense) {
+        categoryCache.set(
+          `EXPENSE:${DEFAULT_EXPENSE_CATEGORY}`,
+          defaultExpense.id,
+        );
+      }
+      if (defaultIncome) {
+        categoryCache.set(
+          `INCOME:${DEFAULT_INCOME_CATEGORY}`,
+          defaultIncome.id,
+        );
+      }
+
       // Step 1: Categorize all transactions using keyword matching
       const categorizedTransactions = transactions.map((tx) => {
         const categoryResult = this.categoryMapper.mapCategory(
@@ -558,7 +606,10 @@ export class TelegramService implements OnModuleInit {
       let aiCategorized = 0;
 
       // Step 3: Use AI for low-confidence transactions (if available)
-      if (lowConfidenceTransactions.length > 0 && this.aiCategorizer.isAvailable()) {
+      if (
+        lowConfidenceTransactions.length > 0 &&
+        this.aiCategorizer.isAvailable()
+      ) {
         try {
           await ctx.reply(
             `🤖 Распознаю ${lowConfidenceTransactions.length} транзакций через AI...`,
@@ -569,7 +620,11 @@ export class TelegramService implements OnModuleInit {
             description: tx.description,
           }));
 
-          const aiResults = await this.aiCategorizer.categorizeTransactions(aiInput);
+          // Pass user's categories to AI
+          const aiResults = await this.aiCategorizer.categorizeTransactions(
+            aiInput,
+            categoriesForAi,
+          );
 
           // Update categories from AI results
           for (const tx of lowConfidenceTransactions) {
@@ -589,13 +644,9 @@ export class TelegramService implements OnModuleInit {
         }
       }
 
-      // Cache for categories to avoid repeated DB queries
-      const categoryCache = new Map<string, string>(); // "type:name" -> categoryId
-
       // Import transactions
       let imported = 0;
       let skipped = 0;
-      let categoriesCreated = 0;
 
       for (const tx of categorizedTransactions) {
         // Check for duplicates (same date, amount, description)
@@ -613,36 +664,23 @@ export class TelegramService implements OnModuleInit {
           continue;
         }
 
-        // Get or create category
-        const categoryName = tx.category;
-        const cacheKey = `${tx.type}:${categoryName}`;
+        // Find category in cache (no creation - only use existing categories)
+        const cacheKey = `${tx.type}:${tx.category}`;
         let categoryId = categoryCache.get(cacheKey);
 
+        // If category not found, use default category
         if (!categoryId) {
-          // Try to find existing category for this user
-          let category = await this.prisma.category.findFirst({
-            where: {
-              userId,
-              name: categoryName,
-              type: tx.type,
-            },
-          });
+          const defaultKey =
+            tx.type === 'INCOME'
+              ? `INCOME:${DEFAULT_INCOME_CATEGORY}`
+              : `EXPENSE:${DEFAULT_EXPENSE_CATEGORY}`;
+          categoryId = categoryCache.get(defaultKey);
 
-          // If not found, create new user category
-          if (!category) {
-            category = await this.prisma.category.create({
-              data: {
-                userId,
-                name: categoryName,
-                type: tx.type,
-                isSystem: false,
-              },
-            });
-            categoriesCreated++;
+          // This should never happen if ensureDefaultCategories worked
+          if (!categoryId) {
+            this.logger.error(`Default category not found for type ${tx.type}`);
+            continue;
           }
-
-          categoryId = category.id;
-          categoryCache.set(cacheKey, categoryId);
         }
 
         await this.prisma.transaction.create({
@@ -657,13 +695,8 @@ export class TelegramService implements OnModuleInit {
           },
         });
 
-        // Update account balance
-        const balanceChange =
-          tx.type === 'INCOME' ? Math.abs(tx.amount) : -Math.abs(tx.amount);
-        await this.prisma.account.update({
-          where: { id: account.id },
-          data: { balance: { increment: balanceChange } },
-        });
+        // Balance is NOT updated - imported transactions are historical
+        // Initial account balance already includes these transactions
 
         imported++;
       }
@@ -676,12 +709,9 @@ export class TelegramService implements OnModuleInit {
         `• Пропущено (дубли): ${skipped}\n` +
         `• Счёт: ${account.name}`;
 
-      if (categoriesCreated > 0) {
-        message += `\n• Создано категорий: ${categoriesCreated}`;
-      }
-
       // AI stats
-      const keywordCategorized = transactions.length - lowConfidenceTransactions.length;
+      const keywordCategorized =
+        transactions.length - lowConfidenceTransactions.length;
       if (this.aiCategorizer.isAvailable()) {
         message += `\n\n🤖 Категоризация:\n`;
         message += `• По ключевым словам: ${keywordCategorized}\n`;
@@ -698,6 +728,41 @@ export class TelegramService implements OnModuleInit {
         '❌ Ошибка при импорте транзакций.\n' +
           'Попробуйте ещё раз или обратитесь в поддержку.',
       );
+    }
+  }
+
+  /**
+   * Ensure default categories exist for user
+   */
+  private async ensureDefaultCategories(userId: string): Promise<void> {
+    // Check and create default expense category
+    const existingExpense = await this.prisma.category.findFirst({
+      where: { userId, name: DEFAULT_EXPENSE_CATEGORY, type: 'EXPENSE' },
+    });
+    if (!existingExpense) {
+      await this.prisma.category.create({
+        data: {
+          userId,
+          name: DEFAULT_EXPENSE_CATEGORY,
+          type: 'EXPENSE',
+          isSystem: false,
+        },
+      });
+    }
+
+    // Check and create default income category
+    const existingIncome = await this.prisma.category.findFirst({
+      where: { userId, name: DEFAULT_INCOME_CATEGORY, type: 'INCOME' },
+    });
+    if (!existingIncome) {
+      await this.prisma.category.create({
+        data: {
+          userId,
+          name: DEFAULT_INCOME_CATEGORY,
+          type: 'INCOME',
+          isSystem: false,
+        },
+      });
     }
   }
 

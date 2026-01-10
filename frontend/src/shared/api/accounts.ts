@@ -10,6 +10,10 @@ export interface Account {
   balance: number;
   icon?: string;
   color?: string;
+  cardNumber?: string;
+  expiryDate?: string;
+  accountNumber?: string;
+  bankName?: string;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -22,6 +26,19 @@ export interface CreateAccountData {
   balance: number;
   icon?: string;
   color?: string;
+  cardNumber?: string;
+  expiryDate?: string;
+  accountNumber?: string;
+  bankName?: string;
+}
+
+export interface ParseRequisitesResult {
+  bankName: string;
+  suggestedName: string;
+  cardLastFour: string;
+  accountNumber: string;
+  currency: string;
+  ownerName: string;
 }
 
 export type UpdateAccountData = Partial<CreateAccountData>;
@@ -59,6 +76,17 @@ export const accountsApi = {
 
   archive: async (id: string): Promise<Account> => {
     const { data } = await apiClient.delete(`/accounts/${id}`);
+    return data;
+  },
+
+  parseRequisites: async (file: File): Promise<ParseRequisitesResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await apiClient.post('/accounts/parse-requisites', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return data;
   },
 };

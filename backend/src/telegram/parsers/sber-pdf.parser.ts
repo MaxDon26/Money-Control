@@ -53,6 +53,50 @@ export class SberPdfParser {
     );
   }
 
+  /**
+   * Extract account metadata from Sberbank statement PDF
+   * Returns accountNumber (20 digits) and bankName
+   */
+  async extractAccountInfo(
+    pdfBuffer: Buffer,
+  ): Promise<{ accountNumber: string | null; bankName: string }> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+      const parser = new PDFParse({ data: pdfBuffer });
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+      const result = await parser.getText();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      await parser.destroy();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const text: string = result.text as string;
+
+      // Look for account number pattern
+      const accountPatterns = [
+        /номер\s+лицевого\s+счета[:\s]*(\d{20})/i,
+        /номер\s+счета[:\s]*(\d{20})/i,
+        /лицевой\s+счет[:\s]*(\d{20})/i,
+        /счет[:\s]*(\d{20})/i,
+        /(\d{20})/, // Fallback: any 20-digit number
+      ];
+
+      let accountNumber: string | null = null;
+      for (const pattern of accountPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          accountNumber = match[1];
+          break;
+        }
+      }
+
+      return {
+        accountNumber,
+        bankName: 'Сбербанк',
+      };
+    } catch {
+      return { accountNumber: null, bankName: 'Сбербанк' };
+    }
+  }
+
   async parse(pdfBuffer: Buffer): Promise<ParsedTransaction[]> {
     const transactions: ParsedTransaction[] = [];
 

@@ -7,10 +7,11 @@ import {
   CategorizationResult,
 } from './ai-categorizer.interface';
 import {
-  SYSTEM_PROMPT,
+  CategoryForAi,
+  buildSystemPrompt,
   buildUserPrompt,
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
+  DEFAULT_EXPENSE_CATEGORY,
+  DEFAULT_INCOME_CATEGORY,
 } from './categorization-prompt';
 
 @Injectable()
@@ -35,6 +36,7 @@ export class OpenAiProvider implements AiProvider {
 
   async categorize(
     transactions: TransactionForCategorization[],
+    categories: CategoryForAi[],
   ): Promise<CategorizationResult> {
     if (!this.client) {
       throw new Error('OpenAI client not initialized');
@@ -44,13 +46,14 @@ export class OpenAiProvider implements AiProvider {
       return {};
     }
 
+    const systemPrompt = buildSystemPrompt(categories);
     const userPrompt = buildUserPrompt(transactions);
 
     try {
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.1,
@@ -62,7 +65,7 @@ export class OpenAiProvider implements AiProvider {
         throw new Error('Empty response from OpenAI');
       }
 
-      const result = this.parseResponse(content, transactions);
+      const result = this.parseResponse(content, transactions, categories);
       this.logger.debug(
         `Categorized ${transactions.length} transactions via OpenAI`,
       );
@@ -76,33 +79,39 @@ export class OpenAiProvider implements AiProvider {
   private parseResponse(
     responseText: string,
     transactions: TransactionForCategorization[],
+    categories: CategoryForAi[],
   ): CategorizationResult {
     const parsed = JSON.parse(responseText) as Record<string, string>;
     const result: CategorizationResult = {};
 
+    // Build valid category sets from provided categories
+    const validExpenseCategories = new Set(
+      categories.filter((c) => c.type === 'EXPENSE').map((c) => c.name),
+    );
+    validExpenseCategories.add(DEFAULT_EXPENSE_CATEGORY);
+
+    const validIncomeCategories = new Set(
+      categories.filter((c) => c.type === 'INCOME').map((c) => c.name),
+    );
+    validIncomeCategories.add(DEFAULT_INCOME_CATEGORY);
+
     // Validate categories
     for (const tx of transactions) {
       const category = parsed[tx.id.toString()];
-      if (category && this.isValidCategory(category, tx.type)) {
+      const validCategories =
+        tx.type === 'INCOME' ? validIncomeCategories : validExpenseCategories;
+
+      if (category && validCategories.has(category)) {
         result[tx.id.toString()] = category;
       } else {
         // Fallback to default
         result[tx.id.toString()] =
-          tx.type === 'INCOME' ? 'Прочие доходы' : 'Прочие расходы';
+          tx.type === 'INCOME'
+            ? DEFAULT_INCOME_CATEGORY
+            : DEFAULT_EXPENSE_CATEGORY;
       }
     }
 
     return result;
-  }
-
-  private isValidCategory(
-    category: string,
-    type: 'INCOME' | 'EXPENSE',
-  ): boolean {
-    const validCategories =
-      type === 'INCOME'
-        ? (INCOME_CATEGORIES as readonly string[])
-        : (EXPENSE_CATEGORIES as readonly string[]);
-    return validCategories.includes(category);
   }
 }

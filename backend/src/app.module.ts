@@ -18,6 +18,7 @@ import { BudgetsModule } from './budgets';
 import { RecurringModule } from './recurring';
 import { TagsModule } from './tags';
 import { TelegramModule } from './telegram/telegram.module';
+import { ImportModule } from './import/import.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { TelegramModule } from './telegram/telegram.module';
     RecurringModule,
     TagsModule,
     TelegramModule,
+    ImportModule,
   ],
   controllers: [AppController],
   providers: [

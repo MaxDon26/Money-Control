@@ -31,6 +31,7 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   FilterOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -48,6 +49,7 @@ import {
   tagsApi,
 } from '@/shared/api';
 import { SEO } from '@/shared/ui';
+import { ImportStatementModal } from '@/features/import';
 
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
@@ -60,6 +62,7 @@ export default function TransactionsPage() {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [operationType, setOperationType] = useState<OperationType>('EXPENSE');
   const [form] = Form.useForm();
@@ -452,9 +455,14 @@ export default function TransactionsPage() {
       <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? 16 : 24, flexWrap: 'wrap', gap: 8 }}>
         <Title level={isMobile ? 3 : 2} style={{ margin: 0 }}>Транзакции</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
-          {isMobile ? '' : 'Добавить'}
-        </Button>
+        <Space>
+          <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>
+            {isMobile ? '' : 'Импорт'}
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
+            {isMobile ? '' : 'Добавить'}
+          </Button>
+        </Space>
       </div>
 
       {/* Статистика */}
@@ -834,6 +842,12 @@ export default function TransactionsPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <ImportStatementModal
+        open={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        accounts={accounts.filter((a) => !a.isArchived)}
+      />
     </div>
     </>
   );

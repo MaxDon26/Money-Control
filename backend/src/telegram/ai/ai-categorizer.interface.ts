@@ -1,3 +1,5 @@
+import { CategoryForAi } from './categorization-prompt';
+
 export interface TransactionForCategorization {
   id: number;
   type: 'INCOME' | 'EXPENSE';
@@ -11,6 +13,7 @@ export interface CategorizationResult {
 export interface AiProvider {
   categorize(
     transactions: TransactionForCategorization[],
+    categories: CategoryForAi[],
   ): Promise<CategorizationResult>;
   isAvailable(): boolean;
 }

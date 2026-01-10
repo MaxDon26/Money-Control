@@ -6,7 +6,11 @@ import {
 } from './ai-categorizer.interface';
 import { AnthropicProvider } from './anthropic.provider';
 import { OpenAiProvider } from './openai.provider';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './categorization-prompt';
+import {
+  CategoryForAi,
+  DEFAULT_EXPENSE_CATEGORY,
+  DEFAULT_INCOME_CATEGORY,
+} from './categorization-prompt';
 
 interface CacheEntry {
   category: string;
@@ -64,11 +68,14 @@ export class AiCategorizerService {
   }
 
   /**
-   * Categorize transactions using AI
+   * Categorize transactions using AI with user's categories from DB
+   * @param transactions - transactions to categorize
+   * @param categories - available categories from user's DB
    * Returns a map of description -> category
    */
   async categorizeTransactions(
     transactions: { type: 'INCOME' | 'EXPENSE'; description: string }[],
+    categories: CategoryForAi[],
   ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     const uncached: TransactionForCategorization[] = [];
@@ -79,7 +86,8 @@ export class AiCategorizerService {
       const cacheKey = this.getCacheKey(tx.description, tx.type);
       const cached = this.getFromCache(cacheKey);
 
-      if (cached) {
+      // Validate cached category is still in user's categories
+      if (cached && this.isValidCachedCategory(cached, tx.type, categories)) {
         result.set(tx.description, cached);
       } else {
         uncached.push({
@@ -102,14 +110,16 @@ export class AiCategorizerService {
       this.logger.warn('No AI provider available, using defaults');
       for (const tx of uncached) {
         const defaultCategory =
-          tx.type === 'INCOME' ? 'Прочие доходы' : 'Прочие расходы';
+          tx.type === 'INCOME'
+            ? DEFAULT_INCOME_CATEGORY
+            : DEFAULT_EXPENSE_CATEGORY;
         result.set(tx.description, defaultCategory);
       }
       return result;
     }
 
     // Process in batches
-    const aiResults = await this.processBatches(uncached, provider);
+    const aiResults = await this.processBatches(uncached, provider, categories);
 
     // Update results and cache
     for (const tx of uncached) {
@@ -129,17 +139,25 @@ export class AiCategorizerService {
   }
 
   /**
-   * Categorize a single transaction
+   * Check if cached category is valid for user's current categories
    */
-  async categorizeOne(
+  private isValidCachedCategory(
+    cachedCategory: string,
     type: 'INCOME' | 'EXPENSE',
-    description: string,
-  ): Promise<string> {
-    const results = await this.categorizeTransactions([{ type, description }]);
-    return (
-      results.get(description) ||
-      (type === 'INCOME' ? 'Прочие доходы' : 'Прочие расходы')
-    );
+    categories: CategoryForAi[],
+  ): boolean {
+    const validCategories = categories
+      .filter((c) => c.type === type)
+      .map((c) => c.name);
+
+    // Also allow default categories
+    if (type === 'INCOME') {
+      validCategories.push(DEFAULT_INCOME_CATEGORY);
+    } else {
+      validCategories.push(DEFAULT_EXPENSE_CATEGORY);
+    }
+
+    return validCategories.includes(cachedCategory);
   }
 
   /**
@@ -148,6 +166,7 @@ export class AiCategorizerService {
   private async processBatches(
     transactions: TransactionForCategorization[],
     provider: AnthropicProvider | OpenAiProvider,
+    categories: CategoryForAi[],
   ): Promise<CategorizationResult> {
     const allResults: CategorizationResult = {};
 
@@ -155,33 +174,21 @@ export class AiCategorizerService {
       const batch = transactions.slice(i, i + this.BATCH_SIZE);
 
       try {
-        const batchResults = await provider.categorize(batch);
+        const batchResults = await provider.categorize(batch, categories);
         Object.assign(allResults, batchResults);
       } catch (error) {
         this.logger.error(`Batch ${i / this.BATCH_SIZE + 1} failed`, error);
         // Use defaults for failed batch
         for (const tx of batch) {
           allResults[tx.id.toString()] =
-            tx.type === 'INCOME' ? 'Прочие доходы' : 'Прочие расходы';
+            tx.type === 'INCOME'
+              ? DEFAULT_INCOME_CATEGORY
+              : DEFAULT_EXPENSE_CATEGORY;
         }
       }
     }
 
     return allResults;
-  }
-
-  /**
-   * Get available expense categories
-   */
-  getExpenseCategories(): readonly string[] {
-    return EXPENSE_CATEGORIES;
-  }
-
-  /**
-   * Get available income categories
-   */
-  getIncomeCategories(): readonly string[] {
-    return INCOME_CATEGORIES;
   }
 
   /**

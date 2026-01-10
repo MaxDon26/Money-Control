@@ -42,7 +42,11 @@ model Account {
   balance    Decimal     @db.Decimal(15, 2)
   icon       String?
   color      String?
-  isArchived Boolean     @default(false)
+  cardNumber    String?   // Номер карты (для типа CARD)
+  expiryDate    DateTime? // Срок действия карты (для типа CARD)
+  accountNumber String?   // Номер лицевого счёта (20 цифр, для сопоставления с выписками)
+  bankName      String?   // Название банка (Сбербанк, Тинькофф, и т.д.)
+  isArchived    Boolean   @default(false)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 

@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma';
 import { EmailService } from '../email';
+import { CategoriesService } from '../categories/categories.service';
 import { RegisterDto, LoginDto } from './dto';
 
 interface TokenPayload {
@@ -30,6 +31,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailService: EmailService,
+    private categoriesService: CategoriesService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -56,6 +58,9 @@ export class AuthService {
         createdAt: true,
       },
     });
+
+    // Создаём базовые категории для нового пользователя
+    await this.categoriesService.createDefaultCategories(user.id);
 
     const tokens = await this.generateTokens({
       sub: user.id,

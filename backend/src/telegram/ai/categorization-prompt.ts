@@ -1,61 +1,43 @@
-export const EXPENSE_CATEGORIES = [
-  'Супермаркеты',
-  'Рестораны и кафе',
-  'Здоровье и аптеки',
-  'Транспорт и авто',
-  'Связь и интернет',
-  'Подписки и сервисы',
-  'Одежда и обувь',
-  'Развлечения',
-  'Жильё и ЖКХ',
-  'Техника и электроника',
-  'Образование',
-  'Переводы',
-  'Снятие наличных',
-  'Прочие расходы',
-] as const;
+export interface CategoryForAi {
+  name: string;
+  type: 'INCOME' | 'EXPENSE';
+}
 
-export const INCOME_CATEGORIES = [
-  'Зарплата и доход',
-  'Переводы',
-  'Кэшбэк и возврат',
-  'Прочие доходы',
-] as const;
+export const DEFAULT_EXPENSE_CATEGORY = 'Прочие расходы';
+export const DEFAULT_INCOME_CATEGORY = 'Прочие доходы';
 
-export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
-export type IncomeCategory = (typeof INCOME_CATEGORIES)[number];
-export type Category = ExpenseCategory | IncomeCategory;
+export function buildSystemPrompt(categories: CategoryForAi[]): string {
+  const expenseCategories = categories
+    .filter((c) => c.type === 'EXPENSE')
+    .map((c) => c.name);
 
-export const SYSTEM_PROMPT = `Ты — классификатор банковских транзакций. Твоя задача — определить категорию для каждой транзакции.
+  const incomeCategories = categories
+    .filter((c) => c.type === 'INCOME')
+    .map((c) => c.name);
+
+  // Ensure default categories are always present
+  if (!expenseCategories.includes(DEFAULT_EXPENSE_CATEGORY)) {
+    expenseCategories.push(DEFAULT_EXPENSE_CATEGORY);
+  }
+  if (!incomeCategories.includes(DEFAULT_INCOME_CATEGORY)) {
+    incomeCategories.push(DEFAULT_INCOME_CATEGORY);
+  }
+
+  return `Ты — классификатор банковских транзакций. Твоя задача — определить категорию для каждой транзакции.
 
 ДОСТУПНЫЕ КАТЕГОРИИ РАСХОДОВ:
-- Супермаркеты (продуктовые магазины, гипермаркеты)
-- Рестораны и кафе (еда вне дома, фастфуд, доставка еды)
-- Здоровье и аптеки (лекарства, врачи, клиники)
-- Транспорт и авто (такси, бензин, парковка, ремонт авто)
-- Связь и интернет (мобильная связь, интернет-провайдеры)
-- Подписки и сервисы (хостинг, облака, онлайн-сервисы)
-- Одежда и обувь (магазины одежды, обуви, аксессуаров)
-- Развлечения (кино, игры, стриминг, хобби)
-- Жильё и ЖКХ (аренда, коммуналка, ремонт)
-- Техника и электроника (гаджеты, бытовая техника)
-- Образование (курсы, книги, обучение)
-- Переводы (переводы физлицам)
-- Снятие наличных (ATM, банкоматы)
-- Прочие расходы (всё что не подходит под другие категории)
+${expenseCategories.map((c) => `- ${c}`).join('\n')}
 
 ДОСТУПНЫЕ КАТЕГОРИИ ДОХОДОВ:
-- Зарплата и доход (зарплата, гонорары, выплаты)
-- Переводы (входящие переводы от людей)
-- Кэшбэк и возврат (возвраты, кэшбэк, бонусы)
-- Прочие доходы (всё что не подходит под другие категории)
+${incomeCategories.map((c) => `- ${c}`).join('\n')}
 
 ПРАВИЛА:
 1. Используй ТОЛЬКО категории из списка выше (точное название)
 2. Для расходов (EXPENSE) выбирай из категорий расходов
 3. Для доходов (INCOME) выбирай из категорий доходов
-4. Если не уверен — используй "Прочие расходы" или "Прочие доходы"
+4. Если не можешь определить категорию — используй "${DEFAULT_EXPENSE_CATEGORY}" для расходов или "${DEFAULT_INCOME_CATEGORY}" для доходов
 5. Отвечай ТОЛЬКО JSON без пояснений`;
+}
 
 export function buildUserPrompt(
   transactions: { id: number; type: string; description: string }[],
@@ -70,5 +52,5 @@ export function buildUserPrompt(
 
 ${JSON.stringify(data, null, 2)}
 
-Ответ (только JSON):`;
+Ответ (только JSON, формат {"id": "категория"}):`;
 }

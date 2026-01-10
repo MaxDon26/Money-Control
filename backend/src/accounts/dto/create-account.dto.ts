@@ -1,4 +1,12 @@
-import { IsString, IsEnum, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  Min,
+  IsDateString,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AccountType } from '@prisma/client';
 
@@ -30,4 +38,38 @@ export class CreateAccountDto {
   @IsString()
   @IsOptional()
   color?: string;
+
+  @ApiPropertyOptional({
+    example: '2200700000008823',
+    description: 'Номер карты (16 цифр)',
+  })
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{16}$/, { message: 'Номер карты должен содержать 16 цифр' })
+  cardNumber?: string;
+
+  @ApiPropertyOptional({
+    example: '2027-12-01',
+    description: 'Срок действия карты',
+  })
+  @IsDateString()
+  @IsOptional()
+  expiryDate?: string;
+
+  @ApiPropertyOptional({
+    example: '40817810100096040360',
+    description: 'Номер лицевого счёта (20 цифр)',
+  })
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{20}$/, { message: 'Номер счёта должен содержать 20 цифр' })
+  accountNumber?: string;
+
+  @ApiPropertyOptional({
+    example: 'Тинькофф',
+    description: 'Название банка',
+  })
+  @IsString()
+  @IsOptional()
+  bankName?: string;
 }

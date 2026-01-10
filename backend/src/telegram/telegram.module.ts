@@ -8,6 +8,9 @@ import { TinkoffParser } from './parsers/tinkoff.parser';
 import { SberParser } from './parsers/sber.parser';
 import { TinkoffPdfParser } from './parsers/tinkoff-pdf.parser';
 import { SberPdfParser } from './parsers/sber-pdf.parser';
+import { RequisitesParser } from './parsers/requisites.parser';
+import { SberRequisitesParser } from './parsers/sber-requisites.parser';
+import { TinkoffRequisitesParser } from './parsers/tinkoff-requisites.parser';
 import { AiCategorizerService } from './ai/ai-categorizer.service';
 import { AnthropicProvider } from './ai/anthropic.provider';
 import { OpenAiProvider } from './ai/openai.provider';
@@ -22,11 +25,28 @@ import { OpenAiProvider } from './ai/openai.provider';
     SberParser,
     TinkoffPdfParser,
     SberPdfParser,
+    // Requisites parsers
+    SberRequisitesParser,
+    TinkoffRequisitesParser,
+    RequisitesParser,
     // AI categorization
     AiCategorizerService,
     AnthropicProvider,
     OpenAiProvider,
   ],
-  exports: [TelegramService, AiCategorizerService],
+  exports: [
+    TelegramService,
+    AiCategorizerService,
+    // Parsers for reuse in Import module
+    CategoryMapper,
+    TinkoffParser,
+    SberParser,
+    TinkoffPdfParser,
+    SberPdfParser,
+    // Requisites parsers
+    SberRequisitesParser,
+    TinkoffRequisitesParser,
+    RequisitesParser,
+  ],
 })
 export class TelegramModule {}

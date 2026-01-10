@@ -20,7 +20,12 @@ import {
   Empty,
   ColorPicker,
   Grid,
+  Upload,
+  DatePicker,
+  Alert,
 } from 'antd';
+import type { UploadFile } from 'antd/es/upload/interface';
+import dayjs from 'dayjs';
 import {
   PlusOutlined,
   WalletOutlined,
@@ -30,14 +35,18 @@ import {
   LineChartOutlined,
   EditOutlined,
   DeleteOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
-import { accountsApi, Account, AccountType, CreateAccountData } from '@/shared/api';
+import { accountsApi, Account, AccountType, CreateAccountData, ParseRequisitesResult } from '@/shared/api';
 import { SEO } from '@/shared/ui';
 
 const { Title } = Typography;
 const { useBreakpoint } = Grid;
 
-const ACCOUNT_ICONS = ['💳', '💵', '🏦', '💰', '📈', '🪙', '💎', '🏠', '🚗', '✈️', '🎓', '🏥'];
+const ACCOUNT_ICONS = [
+  '💳', '💵', '🏦', '💰', '📈', '🪙', '💎', '🏠', '🚗', '✈️',
+  '🎓', '🏥', '👶', '🐕', '🎮', '📱', '💻', '🛒', '☕', '🎁',
+];
 
 const accountTypeLabels: Record<AccountType, string> = {
   CASH: 'Наличные',
@@ -70,6 +79,10 @@ export default function AccountsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [form] = Form.useForm();
+  const [parsedRequisites, setParsedRequisites] = useState<ParseRequisitesResult | null>(null);
+  const [requisitesFileList, setRequisitesFileList] = useState<UploadFile[]>([]);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [iconSelectOpen, setIconSelectOpen] = useState(false);
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ['accounts'],
@@ -116,12 +129,37 @@ export default function AccountsPage() {
     onError: () => message.error('Ошибка при архивировании счёта'),
   });
 
+  const parseRequisitesMutation = useMutation({
+    mutationFn: accountsApi.parseRequisites,
+    onSuccess: (data) => {
+      setParsedRequisites(data);
+      setParseError(null);
+      form.setFieldsValue({
+        name: data.suggestedName,
+        type: 'CARD',
+        currency: data.currency,
+        accountNumber: data.accountNumber,
+        bankName: data.bankName,
+      });
+      message.success(`Реквизиты ${data.bankName} распознаны`);
+    },
+    onError: (error: Error & { response?: { data?: { message?: string } } }) => {
+      setParseError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Не удалось распознать реквизиты'
+      );
+      setParsedRequisites(null);
+    },
+  });
+
   const handleOpenModal = (account?: Account) => {
     if (account) {
       setEditingAccount(account);
       form.setFieldsValue({
         ...account,
         balance: Number(account.balance),
+        expiryDate: account.expiryDate ? dayjs(account.expiryDate) : undefined,
       });
     } else {
       setEditingAccount(null);
@@ -134,13 +172,25 @@ export default function AccountsPage() {
     setIsModalOpen(false);
     setEditingAccount(null);
     form.resetFields();
+    setParsedRequisites(null);
+    setRequisitesFileList([]);
+    setParseError(null);
   };
 
-  const handleSubmit = async (values: CreateAccountData) => {
+  const handleRequisitesUpload = (file: File) => {
+    parseRequisitesMutation.mutate(file);
+    return false;
+  };
+
+  const handleSubmit = async (values: CreateAccountData & { expiryDate?: dayjs.Dayjs }) => {
+    const submitData: CreateAccountData = {
+      ...values,
+      expiryDate: values.expiryDate ? values.expiryDate.format('YYYY-MM-DD') : undefined,
+    };
     if (editingAccount) {
-      await updateMutation.mutateAsync({ id: editingAccount.id, data: values });
+      await updateMutation.mutateAsync({ id: editingAccount.id, data: submitData });
     } else {
-      await createMutation.mutateAsync(values);
+      await createMutation.mutateAsync(submitData);
     }
   };
 
@@ -261,14 +311,6 @@ export default function AccountsPage() {
           initialValues={{ type: 'CARD', currency: 'RUB', balance: 0 }}
         >
           <Form.Item
-            name="name"
-            label="Название"
-            rules={[{ required: true, message: 'Введите название' }]}
-          >
-            <Input placeholder="Например: Основная карта" />
-          </Form.Item>
-
-          <Form.Item
             name="type"
             label="Тип счёта"
             rules={[{ required: true, message: 'Выберите тип' }]}
@@ -283,6 +325,74 @@ export default function AccountsPage() {
                 </Select.Option>
               ))}
             </Select>
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.type !== curr.type}>
+            {({ getFieldValue }) => {
+              const accountType = getFieldValue('type') as AccountType;
+              if (accountType !== 'CARD' || editingAccount) return null;
+
+              return (
+                <>
+                  <Upload.Dragger
+                    accept=".pdf"
+                    fileList={requisitesFileList}
+                    onChange={({ fileList }) => setRequisitesFileList(fileList.slice(-1))}
+                    beforeUpload={handleRequisitesUpload}
+                    maxCount={1}
+                    disabled={parseRequisitesMutation.isPending}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <p className="ant-upload-drag-icon">
+                      <UploadOutlined />
+                    </p>
+                    <p className="ant-upload-text">
+                      Загрузите PDF с реквизитами карты
+                    </p>
+                    <p className="ant-upload-hint">
+                      Поддерживаются: Сбербанк, Тинькофф
+                    </p>
+                  </Upload.Dragger>
+
+                  {parseError && (
+                    <Alert
+                      type="error"
+                      message={parseError}
+                      style={{ marginBottom: 16 }}
+                      showIcon
+                      closable
+                      onClose={() => setParseError(null)}
+                    />
+                  )}
+
+                  {parsedRequisites && (
+                    <Alert
+                      type="success"
+                      message={`Банк: ${parsedRequisites.bankName}`}
+                      description={
+                        <Space direction="vertical" size={0}>
+                          <span>Владелец: {parsedRequisites.ownerName || '—'}</span>
+                          <span>Карта: ••{parsedRequisites.cardLastFour}</span>
+                          {parsedRequisites.accountNumber && (
+                            <span>Счёт: {parsedRequisites.accountNumber}</span>
+                          )}
+                        </Space>
+                      }
+                      style={{ marginBottom: 16 }}
+                      showIcon
+                    />
+                  )}
+                </>
+              );
+            }}
+          </Form.Item>
+
+          <Form.Item
+            name="name"
+            label="Название"
+            rules={[{ required: true, message: 'Введите название' }]}
+          >
+            <Input placeholder="Например: Основная карта" />
           </Form.Item>
 
           <Form.Item
@@ -305,10 +415,108 @@ export default function AccountsPage() {
             </Select>
           </Form.Item>
 
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.type !== curr.type}>
+            {({ getFieldValue }) => {
+              const accountType = getFieldValue('type') as AccountType;
+              if (accountType !== 'CARD') return null;
+
+              return (
+                <>
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="cardNumber"
+                        label="Номер карты"
+                        rules={[
+                          { required: true, message: 'Введите номер карты' },
+                          { pattern: /^\d{16}$/, message: '16 цифр' },
+                        ]}
+                      >
+                        <Input placeholder="0000 0000 0000 0000" maxLength={16} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="expiryDate"
+                        label="Срок действия"
+                        rules={[{ required: true, message: 'Укажите срок действия' }]}
+                      >
+                        <DatePicker
+                          picker="month"
+                          format="MM/YYYY"
+                          placeholder="MM/YYYY"
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item
+                        name="accountNumber"
+                        label="Лицевой счёт"
+                        tooltip="20-значный номер для сопоставления с выписками"
+                        rules={[
+                          { pattern: /^\d{20}$/, message: '20 цифр' },
+                        ]}
+                      >
+                        <Input placeholder="40817810100096040360" maxLength={20} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        name="bankName"
+                        label="Банк"
+                      >
+                        <Input placeholder="Тинькофф" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </>
+              );
+            }}
+          </Form.Item>
+
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="icon" label="Иконка">
-                <Select placeholder="Выберите иконку" allowClear>
+                <Select
+                  placeholder="Выберите иконку"
+                  allowClear
+                  open={iconSelectOpen}
+                  onDropdownVisibleChange={setIconSelectOpen}
+                  dropdownStyle={{ padding: 8 }}
+                  dropdownRender={() => (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(6, 1fr)',
+                      gap: 4,
+                      padding: 4,
+                    }}>
+                      {ACCOUNT_ICONS.map((icon) => (
+                        <div
+                          key={icon}
+                          onClick={() => {
+                            form.setFieldValue('icon', icon);
+                            setIconSelectOpen(false);
+                          }}
+                          style={{
+                            fontSize: 24,
+                            padding: 8,
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            borderRadius: 6,
+                            transition: 'background 0.2s',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          {icon}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                >
                   {ACCOUNT_ICONS.map((icon) => (
                     <Select.Option key={icon} value={icon}>
                       <span style={{ fontSize: 18 }}>{icon}</span>

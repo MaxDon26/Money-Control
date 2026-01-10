@@ -7,19 +7,47 @@ import {
   Param,
   Delete,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  ParseFilePipe,
+  MaxFileSizeValidator,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { AccountsService } from './accounts.service';
-import { CreateAccountDto, UpdateAccountDto } from './dto';
+import {
+  CreateAccountDto,
+  UpdateAccountDto,
+  ParseRequisitesResultDto,
+} from './dto';
 import { JwtAuthGuard } from '../common/guards';
 import { CurrentUser } from '../common/decorators';
+import { RequisitesParser } from '../telegram/parsers/requisites.parser';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
+const { PDFParse } = require('pdf-parse');
+
+interface UploadedFile {
+  originalname: string;
+  buffer: Buffer;
+}
 
 @ApiTags('Accounts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('accounts')
 export class AccountsController {
-  constructor(private readonly accountsService: AccountsService) {}
+  constructor(
+    private readonly accountsService: AccountsService,
+    private readonly requisitesParser: RequisitesParser,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Создать счёт' })
@@ -59,5 +87,69 @@ export class AccountsController {
   @ApiOperation({ summary: 'Архивировать счёт' })
   archive(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.accountsService.archive(userId, id);
+  }
+
+  @Post('parse-requisites')
+  @ApiOperation({ summary: 'Парсинг реквизитов счёта из PDF' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'PDF файл с реквизитами счёта',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.pdf$/i)) {
+          return cb(
+            new BadRequestException('Только PDF файлы поддерживаются'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async parseRequisites(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+        ],
+      }),
+    )
+    file: UploadedFile,
+  ): Promise<ParseRequisitesResultDto> {
+    if (!file) {
+      throw new BadRequestException('Файл не загружен');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+    const pdfParser = new PDFParse({ data: file.buffer });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    const pdfResult = await pdfParser.getText();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    await pdfParser.destroy();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const text: string = pdfResult.text as string;
+
+    const result = this.requisitesParser.parse(text);
+
+    if (!result) {
+      throw new BadRequestException(
+        'Не удалось распознать реквизиты. Поддерживаются: Сбербанк, Тинькофф',
+      );
+    }
+
+    return result;
   }
 }

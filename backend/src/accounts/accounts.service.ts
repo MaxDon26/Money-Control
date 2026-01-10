@@ -16,6 +16,10 @@ export class AccountsService {
         balance: dto.balance,
         icon: dto.icon,
         color: dto.color,
+        cardNumber: dto.cardNumber,
+        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
+        accountNumber: dto.accountNumber,
+        bankName: dto.bankName,
       },
     });
   }
@@ -44,7 +48,10 @@ export class AccountsService {
 
     return this.prisma.account.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
+      },
     });
   }
 

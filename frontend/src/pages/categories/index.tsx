@@ -35,8 +35,12 @@ const categoryTypeLabels: Record<CategoryType, string> = {
 };
 
 const defaultIcons: Record<CategoryType, string[]> = {
-  EXPENSE: ['🛒', '🚗', '🏠', '📱', '💊', '👕', '🎬', '🍽️', '📺', '📚', '🎁', '📦'],
-  INCOME: ['💰', '💻', '📈', '🎁', '↩️', '📦'],
+  EXPENSE: [
+    '🛒', '🍽️', '🚗', '⛽', '🏠', '💡', '📱', '💊', '👕', '👟',
+    '🎬', '🎮', '📺', '📚', '✈️', '🏨', '💳', '🏦', '💸', '📦',
+    '🎁', '👶', '🐕', '💇', '🏋️', '🎵', '☕', '🍺', '🚌', '🅿️',
+  ],
+  INCOME: ['💰', '💵', '💻', '📈', '🏦', '🎁', '↩️', '🔄', '💳', '📦'],
 };
 
 interface CategoryListProps {
@@ -174,6 +178,7 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [parentCategory, setParentCategory] = useState<Category | null>(null);
   const [form] = Form.useForm();
+  const [iconSelectOpen, setIconSelectOpen] = useState(false);
 
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['categories'],
@@ -367,21 +372,78 @@ export default function CategoriesPage() {
           </Form.Item>
 
           <Form.Item name="icon" label="Иконка">
-            <Select placeholder="Выберите иконку">
-              <Select.OptGroup label="Расходы">
-                {defaultIcons.EXPENSE.map((icon) => (
-                  <Select.Option key={icon} value={icon}>
-                    <span style={{ fontSize: 18 }}>{icon}</span>
-                  </Select.Option>
-                ))}
-              </Select.OptGroup>
-              <Select.OptGroup label="Доходы">
-                {defaultIcons.INCOME.map((icon) => (
-                  <Select.Option key={icon} value={icon}>
-                    <span style={{ fontSize: 18 }}>{icon}</span>
-                  </Select.Option>
-                ))}
-              </Select.OptGroup>
+            <Select
+              placeholder="Выберите иконку"
+              open={iconSelectOpen}
+              onDropdownVisibleChange={setIconSelectOpen}
+              dropdownStyle={{ padding: 8 }}
+              dropdownRender={() => (
+                <div>
+                  <div style={{ fontSize: 12, color: '#999', marginBottom: 4, paddingLeft: 4 }}>Расходы</div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(6, 1fr)',
+                    gap: 4,
+                    marginBottom: 8,
+                  }}>
+                    {defaultIcons.EXPENSE.map((icon) => (
+                      <div
+                        key={icon}
+                        onClick={() => {
+                          form.setFieldValue('icon', icon);
+                          setIconSelectOpen(false);
+                        }}
+                        style={{
+                          fontSize: 24,
+                          padding: 8,
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          transition: 'background 0.2s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        {icon}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#999', marginBottom: 4, paddingLeft: 4 }}>Доходы</div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(6, 1fr)',
+                    gap: 4,
+                  }}>
+                    {defaultIcons.INCOME.map((icon) => (
+                      <div
+                        key={icon}
+                        onClick={() => {
+                          form.setFieldValue('icon', icon);
+                          setIconSelectOpen(false);
+                        }}
+                        style={{
+                          fontSize: 24,
+                          padding: 8,
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          borderRadius: 6,
+                          transition: 'background 0.2s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        {icon}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            >
+              {[...defaultIcons.EXPENSE, ...defaultIcons.INCOME].map((icon) => (
+                <Select.Option key={icon} value={icon}>
+                  <span style={{ fontSize: 18 }}>{icon}</span>
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
 
